@@ -1,4 +1,4 @@
-package daemon
+package daemons
 
 import (
 	"github.com/shirou/gopsutil/cpu"
@@ -10,7 +10,7 @@ import (
 	"github.com/swarleynunez/superfog/core/utils"
 )
 
-func InitState() (*types.HostSpecs, *types.HostState) {
+func InitState() (*types.NodeSpecs, *types.NodeState) {
 
 	hi, _ := host.Info()
 
@@ -26,7 +26,7 @@ func InitState() (*types.HostSpecs, *types.HostState) {
 	du, err := disk.Usage("/") // File system root path
 	utils.CheckError(err, utils.WarningMode)
 
-	specs := &types.HostSpecs{
+	specs := &types.NodeSpecs{
 		Arch:       hi.KernelArch,
 		Cores:      cores,
 		Mhz:        ci[0].Mhz,
@@ -36,13 +36,12 @@ func InitState() (*types.HostSpecs, *types.HostState) {
 		OS:         hi.OS,
 		Hostname:   hi.Hostname,
 		BootTime:   hi.BootTime,
-		Uptime:     hi.Uptime,
 	}
 
 	return specs, UpdateState()
 }
 
-func UpdateState() *types.HostState {
+func UpdateState() *types.NodeState {
 
 	cp, err := cpu.Percent(0, false) // Total CPU usage (all cores)
 	utils.CheckError(err, utils.WarningMode)
@@ -52,6 +51,10 @@ func UpdateState() *types.HostState {
 
 	du, err := disk.Usage("/") // File system root path
 	utils.CheckError(err, utils.WarningMode)
+
+	// Entirely disk usage
+	du.Used = du.Total - du.Free
+	du.UsedPercent = (float64(du.Used) / float64(du.Total)) * 100.0
 
 	//dio, err := disk.IOCounters()
 	//utils.CheckError(err, utils.WarningMode)
@@ -91,7 +94,7 @@ func UpdateState() *types.HostState {
 	//	conns = append(conns, &v)
 	//}
 
-	return &types.HostState{
+	return &types.NodeState{
 		CpuPercent:  cp[0],
 		MemUsage:    vm.Used,
 		MemPercent:  vm.UsedPercent,

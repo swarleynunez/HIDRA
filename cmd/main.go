@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/swarleynunez/superfog/core/daemon"
+	"github.com/swarleynunez/superfog/core/daemons"
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/utils"
 	"time"
@@ -48,11 +48,15 @@ func main() {
 	//eth.SendTxn(client, ks, toAddress, AccountPassphrase, 1000000000000000000)
 
 	// Initialize host state (specs and first state)
-	hostSpecs, hostState := daemon.InitState()
+	nodeSpecs, nodeState := daemons.InitState()
+
+	time.Sleep(1 * time.Second)
 
 	// Update host state
-	hostState = daemon.UpdateState()
-	_, _ = hostSpecs, hostState
+	nodeState = daemons.UpdateState()
+
+	fmt.Println(*nodeSpecs)
+	fmt.Println(*nodeState)
 
 	//for {
 	//	select {}

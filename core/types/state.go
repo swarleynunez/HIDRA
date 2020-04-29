@@ -1,15 +1,15 @@
 package types
 
-type HostSpecs struct {
+type NodeSpecs struct {
 	Arch                     string
-	Cores                    int     // Logical cores
+	Cores                    int     // Logical cores number
 	Mhz                      float64 // Physical cores frequency
 	MemTotal, DiskTotal      uint64  // In bytes
 	FileSystem, OS, Hostname string
-	BootTime, Uptime         uint64 // In seconds
+	BootTime                 uint64 // Unix time
 }
 
-type HostState struct {
+type NodeState struct {
 	CpuPercent  float64
 	MemUsage    uint64 // In bytes
 	MemPercent  float64
