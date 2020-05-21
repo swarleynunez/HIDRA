@@ -130,9 +130,6 @@ bower_components
 # node-waf configuration
 .lock-wscript
 
-# Compiled binary addons (https://nodejs.org/api/addons.html)
-build/Release
-
 # Dependency directories
 node_modules/
 jspm_packages/
@@ -256,5 +253,4 @@ $RECYCLE.BIN/
 # End of https://www.gitignore.io/api/go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode
 
 ### Custom ###
-contracts/temp/
 bin/

@@ -1,9 +1,16 @@
 package eth
 
 import (
+	"errors"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/utils"
+)
+
+var (
+	errNotFoundAddr  = errors.New("ethereum address not found in keystore")
+	ErrMalformedAddr = errors.New("malformed ethereum address")
 )
 
 func LoadKeystore(keydir string) (ks *keystore.KeyStore) {
@@ -13,10 +20,43 @@ func LoadKeystore(keydir string) (ks *keystore.KeyStore) {
 	return
 }
 
-func CreateAccount(ks *keystore.KeyStore, passphrase string) (a accounts.Account) {
+func CreateAccount(ks *keystore.KeyStore, passphrase string) (from accounts.Account) {
 
-	a, err := ks.NewAccount(passphrase)
-	utils.CheckError(err, utils.FatalMode)
+	from, err := ks.NewAccount(passphrase)
+	utils.CheckError(err, utils.WarningMode)
+
+	if err == nil {
+		// Save the created address
+		utils.SetEnvKey("NODE_ADDR", from.Address.String())
+	}
+
+	return
+}
+
+func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.Account) {
+
+	if len(ks.Accounts()) == 0 {
+		from = CreateAccount(ks, passphrase)
+	} else {
+		if utils.ValidEthAddress(addr) {
+			for i, v := range ks.Accounts() {
+				if v.Address == common.HexToAddress(addr) {
+					from = ks.Accounts()[i]
+					break
+				}
+			}
+
+			if from == (accounts.Account{}) {
+				utils.CheckError(errNotFoundAddr, utils.WarningMode)
+			}
+		} else {
+			utils.CheckError(ErrMalformedAddr, utils.WarningMode)
+		}
+	}
+
+	// Unlock the loaded account
+	err := ks.Unlock(from, passphrase)
+	utils.CheckError(err, utils.WarningMode)
 
 	return
 }

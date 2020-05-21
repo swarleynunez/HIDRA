@@ -1,34 +1,16 @@
 package utils
 
 import (
+	"encoding/json"
 	"os"
 	"path"
 	"regexp"
-	"strconv"
 )
-
-const (
-	HttpMode = iota
-	HttpsMode
-)
-
-func FormatUrl(ip string, port, mode int) (url string) {
-
-	switch mode {
-
-	case HttpMode:
-		url = "http://" + ip + ":" + strconv.Itoa(port)
-	case HttpsMode:
-		url = "https://" + ip + ":" + strconv.Itoa(port)
-	}
-
-	return
-}
 
 func FormatPath(paths ...string) (p string) {
 
 	p, err := os.UserHomeDir()
-	CheckError(err, FatalMode)
+	CheckError(err, WarningMode)
 
 	for _, v := range paths {
 		p = path.Join(p, v)
@@ -37,9 +19,29 @@ func FormatPath(paths ...string) (p string) {
 	return
 }
 
-func CheckEthAddress(address string) bool {
+func ValidEthAddress(addr string) (r bool) {
 
 	re := regexp.MustCompile("^(?i)(0x)?[0-9a-f]{40}$") // (?i) case insensitive, (0x)? optional hex prefix
+	r = re.MatchString(addr)
 
-	return re.MatchString(address)
+	return
+}
+
+func MarshalJSON(v interface{}) string {
+
+	// Encode any struct to JSON
+	bytes, err := json.Marshal(v)
+	CheckError(err, WarningMode)
+
+	return string(bytes)
+}
+
+func UnmarshalJSON(data string, v interface{}) {
+
+	// String to bytes slice
+	bytes := []byte(data)
+
+	// Decode JSON to any struct
+	err := json.Unmarshal(bytes, v)
+	CheckError(err, WarningMode)
 }

@@ -4,38 +4,32 @@ pragma solidity ^0.6.6;
 contract Faucet {
     // Limit, reward and penalty reputations for system actions
     struct ActionReps {
-        uint64 limit;
-        uint64 reward;
-        uint64 penalty;
+        int64 limit;
+        int64 variation;
     }
 
     // System actions list
-    mapping(string => ActionReps) public actions;
+    mapping(string => ActionReps) private actions;
 
     // Constructor
     constructor() public {
         // Initialize system actions
-        actions["sendEvent"] = ActionReps(100, 0, 0);
+        actions["sendEvent"] = ActionReps(100, 1);
+        actions["sendReply"] = ActionReps(100, 1);
+        actions["voteSolver"] = ActionReps(100, 1);
+        actions["solveEvent"] = ActionReps(100, 1);
     }
 
     // Functions
-    function getActionLimit(string memory action) public view returns (uint64) {
+    function getActionLimit(string memory action) public view returns (int64) {
         return actions[action].limit;
     }
 
-    function getActionReward(string memory action)
+    function getActionVariation(string memory action)
         public
         view
-        returns (uint64)
+        returns (int64)
     {
-        return actions[action].reward;
-    }
-
-    function getActionPenalty(string memory action)
-        public
-        view
-        returns (uint64)
-    {
-        return actions[action].penalty;
+        return actions[action].variation;
     }
 }

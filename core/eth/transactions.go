@@ -2,8 +2,8 @@ package eth
 
 import (
 	"context"
-	"errors"
-	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -12,42 +12,21 @@ import (
 	"math/big"
 )
 
-func SendTxn(c *ethclient.Client, ks *keystore.KeyStore, to common.Address, passphrase string, value int64) (tx *types.Transaction) {
-
-	// Selects the sender account
-	if len(ks.Accounts()) == 0 {
-		err := errors.New("eth: no keystore accounts loaded")
-		utils.CheckError(err, utils.FatalMode)
-	}
-	from := ks.Accounts()[0]
+func SendEther(ethc *ethclient.Client, from accounts.Account, to common.Address, value *big.Int, ks *keystore.KeyStore, passphrase string) {
 
 	// Get the next nonce (sender)
-	nonce, err := c.PendingNonceAt(context.Background(), from.Address)
+	nonce, err := ethc.PendingNonceAt(context.Background(), from.Address)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Gas price
-	gasPrice, err := c.SuggestGasPrice(context.Background())
-	utils.CheckError(err, utils.WarningMode)
-
-	// Call needed fields
-	msg := ethereum.CallMsg{
-		From:     from.Address,
-		To:       &to,
-		Gas:      21000,
-		GasPrice: gasPrice,
-		Value:    big.NewInt(value),
-		Data:     nil,
-	}
-
-	// Gas limit
-	gasLimit, err := c.EstimateGas(context.Background(), msg)
+	gasPrice, err := ethc.SuggestGasPrice(context.Background())
 	utils.CheckError(err, utils.WarningMode)
 
 	// Create raw transaction
-	tx = types.NewTransaction(nonce, *msg.To, msg.Value, gasLimit, msg.GasPrice, msg.Data)
+	tx := types.NewTransaction(nonce, to, value, 21000, gasPrice, nil)
 
 	// Get ChainId for transaction replay protection
-	chainId, err := c.ChainID(context.Background())
+	chainId, err := ethc.ChainID(context.Background())
 	utils.CheckError(err, utils.WarningMode)
 
 	// Signs the raw transaction
@@ -55,8 +34,28 @@ func SendTxn(c *ethclient.Client, ks *keystore.KeyStore, to common.Address, pass
 	utils.CheckError(err, utils.WarningMode)
 
 	// Send the transaction
-	err = c.SendTransaction(context.Background(), tx)
+	err = ethc.SendTransaction(context.Background(), tx)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func GetTransactor(ks *keystore.KeyStore, from accounts.Account, ethc *ethclient.Client, gasLimit uint64) *bind.TransactOpts {
+
+	// Auth transactor type
+	auth, err := bind.NewKeyStoreTransactor(ks, from)
 	utils.CheckError(err, utils.WarningMode)
 
-	return
+	// Set nonce
+	nonce, err := ethc.PendingNonceAt(context.Background(), from.Address)
+	utils.CheckError(err, utils.WarningMode)
+	auth.Nonce = big.NewInt(int64(nonce))
+
+	// Set gas price
+	gasPrice, err := ethc.SuggestGasPrice(context.Background())
+	utils.CheckError(err, utils.WarningMode)
+	auth.GasPrice = gasPrice
+
+	// Set gas limit
+	auth.GasLimit = gasLimit
+
+	return auth
 }

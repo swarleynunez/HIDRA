@@ -1,43 +1,48 @@
 pragma solidity ^0.6.6;
+pragma experimental ABIEncoderV2;
 
 import "./Faucet.sol";
+import "./State.sol";
 import "./Node.sol";
-import "./EventHandler.sol";
+import "./Event.sol";
 
 
 contract Controller {
     // Faucet smart contract instance
-    Faucet private faucet;
+    Faucet public faucet;
 
     // Global network state
-    NetworkState.GlobalState private state;
+    State.GlobalState public state;
 
     // Node list
-    mapping(address => address) private nodes;
+    mapping(address => address) public nodes;
 
     // Event list
-    mapping(uint64 => EventHandler.Event) private events;
+    mapping(uint64 => Event.NodeEvent) public events;
 
     // Solidity events
-    event SendEvent(uint64 id, uint64 typeId, address sender, uint64 createdAt);
+    event NewEvent(uint64 eventId);
+    event RequiredReplies(uint64 eventId);
+    event RequiredVotes(uint64 eventId, address solver);
+    event EventSolved(uint64 eventId, address sender);
 
     // Constructor
     constructor() public {
-        // Deploy the faucet
+        // Faucet instance
         faucet = new Faucet();
 
         // Initialize global network state
-        state = NetworkState.GlobalState(0, 1);
+        state = State.GlobalState(0, 0);
     }
 
     // Functions
-    function registerNode() public {
+    function registerNode(string memory specs) public {
         require(
             !isNodeRegistered(msg.sender),
             "The node is already registered"
         );
 
-        nodes[msg.sender] = address(new Node(msg.sender)); // The "new" keyword creates a smart contract
+        nodes[msg.sender] = address(new Node(msg.sender, specs)); // The "new" keyword creates a smart contract
 
         state.nodeCount++;
     }
@@ -47,7 +52,13 @@ contract Controller {
         return false;
     }
 
-    function sendEvent(uint64 _typeId, uint64 _createdAt) public {
+    // Reputable
+    function sendEvent(
+        string memory _dynType,
+        uint64 _createdAt,
+        string memory _nodeState
+    ) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
             hasNodeReputation(
                 msg.sender,
@@ -56,32 +67,226 @@ contract Controller {
             "The node has not enough reputation"
         );
 
-        // Create and save the new event
-        events[state.nextEventId] = EventHandler.Event(
-            _typeId,
-            msg.sender,
-            _createdAt,
-            address(0), // Empty at the beginning
-            0 // Empty at the beginning
-        );
+        // Create a new event
+        events[state.nextEventId].dynType = _dynType;
+        events[state.nextEventId].sender = msg.sender;
+        events[state.nextEventId].createdAt = _createdAt;
 
-        // Emits a solidity event
-        emit SendEvent(state.nextEventId, _typeId, msg.sender, _createdAt);
+        // Create and link the first reply (event sender)
+        Event.Reply memory reply;
+        reply.sender = msg.sender;
+        reply.nodeState = _nodeState;
+        reply.createdAt = _createdAt;
+        events[state.nextEventId].replies.push(reply);
+
+        emit NewEvent(state.nextEventId);
 
         state.nextEventId++;
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "sendEvent");
     }
 
-    function hasNodeReputation(address nodeAddr, uint64 reputation)
+    function hasNodeReputation(address nodeAddr, int64 reputation)
         public
         view
         returns (bool)
     {
-        require(isNodeRegistered(nodeAddr), "The node is not registered");
+        // Node instance
+        Node nc = Node(nodes[nodeAddr]);
+        if (nc.getReputation() >= reputation) return true;
 
-        // Get node reputation
-        Node nodeContract = Node(nodes[nodeAddr]);
-
-        if (nodeContract.getReputation() >= reputation) return true;
         return false;
+    }
+
+    // Reputable
+    function sendReply(
+        uint64 eventId,
+        string memory _nodeState,
+        uint64 _createdAt
+    ) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("sendReply") // Required reputation to send replies
+            ),
+            "The node has not enough reputation"
+        );
+        require(existEvent(eventId), "The event does not exist");
+        require(!isEventSolved(eventId), "The event is solved");
+        require(
+            !hasAlreadyReplied(eventId, msg.sender),
+            "The node has already replied the event"
+        );
+
+        // Create and link the reply to its event
+        Event.Reply memory reply;
+        reply.sender = msg.sender;
+        reply.nodeState = _nodeState;
+        reply.createdAt = _createdAt;
+        events[eventId].replies.push(reply);
+
+        if (hasRequiredCount(uint64(events[eventId].replies.length))) {
+            emit RequiredReplies(eventId);
+        }
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "sendReply");
+    }
+
+    function existEvent(uint64 eventId) public view returns (bool) {
+        if (events[eventId].sender != address(0)) return true;
+        return false;
+    }
+
+    function hasAlreadyReplied(uint64 eventId, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        Event.Reply[] memory replies = events[eventId].replies;
+
+        for (uint64 i = 0; i < replies.length; i++) {
+            if (replies[i].sender == nodeAddr) return true;
+        }
+
+        return false;
+    }
+
+    function getEventReplies(uint64 eventId)
+        public
+        view
+        returns (Event.Reply[] memory)
+    {
+        return events[eventId].replies;
+    }
+
+    // Reputable
+    function voteSolver(uint64 eventId, address candidateAddr) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("voteSolver") // Required reputation to vote solvers
+            ),
+            "The node has not enough reputation"
+        );
+        require(existEvent(eventId), "The event does not exist");
+        require(!isEventSolved(eventId), "The event is solved");
+        require(
+            hasRequiredCount(uint64(events[eventId].replies.length)),
+            "The event does not have the required replies"
+        );
+        require(
+            hasAlreadyReplied(eventId, candidateAddr),
+            "The candidate has not replied the event"
+        );
+        require(
+            !hasAlreadyVoted(eventId, msg.sender),
+            "The node has already voted a solver"
+        );
+
+        // Search candidate
+        Event.Reply[] memory replies = events[eventId].replies;
+
+        for (uint64 i = 0; i < replies.length; i++) {
+            if (replies[i].sender == candidateAddr) {
+                // Vote candidate (storage)
+                events[eventId].replies[i].voters.push(msg.sender);
+
+                uint64 votes = uint64(replies[i].voters.length + 1);
+                if (hasRequiredCount(votes)) {
+                    emit RequiredVotes(eventId, candidateAddr);
+                }
+
+                break;
+            }
+        }
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "voteSolver");
+    }
+
+    function hasAlreadyVoted(uint64 eventId, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        Event.Reply[] memory replies = events[eventId].replies;
+
+        for (uint64 i = 0; i < replies.length; i++) {
+            for (uint64 j = 0; j < replies[i].voters.length; j++) {
+                if (replies[i].voters[j] == nodeAddr) return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Reputable
+    function solveEvent(uint64 eventId, uint64 _solvedAt) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("solveEvent") // Required reputation to solve events
+            ),
+            "The node has not enough reputation"
+        );
+        require(existEvent(eventId), "The event does not exist");
+        require(!isEventSolved(eventId), "The event is already solved");
+        require(
+            canSolveEvent(eventId, msg.sender),
+            "The node can not solve the event"
+        );
+
+        // Update event solver info
+        events[eventId].solver = msg.sender;
+        events[eventId].solvedAt = _solvedAt;
+
+        emit EventSolved(eventId, events[eventId].sender);
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "solveEvent");
+    }
+
+    function isEventSolved(uint64 eventId) public view returns (bool) {
+        if (events[eventId].solver != address(0)) return true;
+        return false;
+    }
+
+    function canSolveEvent(uint64 eventId, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        Event.Reply[] memory replies = events[eventId].replies;
+        uint64 votes;
+
+        for (uint64 i = 0; i < replies.length; i++) {
+            if (replies[i].sender == nodeAddr) {
+                votes = uint64(replies[i].voters.length);
+                break;
+            }
+        }
+
+        if (hasRequiredCount(votes)) return true;
+        return false;
+    }
+
+    // Private functions
+    function hasRequiredCount(uint64 count) private view returns (bool) {
+        // TODO (51%, 66%)
+        uint64 required = state.nodeCount;
+        if (required != 0 && count == required) return true;
+        return false;
+    }
+
+    function updateReputation(address nodeAddr, string memory action) private {
+        // Node instance
+        Node nc = Node(nodes[nodeAddr]);
+
+        nc.setVariation(faucet.getActionVariation(action));
     }
 }

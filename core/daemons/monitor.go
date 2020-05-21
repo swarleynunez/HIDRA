@@ -1,6 +1,7 @@
 package daemons
 
 import (
+	"fmt"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/host"
@@ -10,9 +11,10 @@ import (
 	"github.com/swarleynunez/superfog/core/utils"
 )
 
-func InitState() (*types.NodeSpecs, *types.NodeState) {
+func firstHostState() (*types.NodeSpecs, *types.NodeState) {
 
-	hi, _ := host.Info()
+	hi, err := host.Info()
+	utils.CheckError(err, utils.WarningMode)
 
 	cores, err := cpu.Counts(true) // Counting physical and logical cores
 	utils.CheckError(err, utils.WarningMode)
@@ -28,8 +30,8 @@ func InitState() (*types.NodeSpecs, *types.NodeState) {
 
 	specs := &types.NodeSpecs{
 		Arch:       hi.KernelArch,
-		Cores:      cores,
-		Mhz:        ci[0].Mhz,
+		Cores:      uint64(cores),
+		Mhz:        fmt.Sprint(ci[0].Mhz),
 		MemTotal:   vm.Total,
 		DiskTotal:  du.Total,
 		FileSystem: du.Fstype,
@@ -38,10 +40,10 @@ func InitState() (*types.NodeSpecs, *types.NodeState) {
 		BootTime:   hi.BootTime,
 	}
 
-	return specs, UpdateState()
+	return specs, getHostState()
 }
 
-func UpdateState() *types.NodeState {
+func getHostState() *types.NodeState {
 
 	cp, err := cpu.Percent(0, false) // Total CPU usage (all cores)
 	utils.CheckError(err, utils.WarningMode)
@@ -95,18 +97,53 @@ func UpdateState() *types.NodeState {
 	//}
 
 	return &types.NodeState{
-		CpuPercent:  cp[0],
-		MemUsage:    vm.Used,
-		MemPercent:  vm.UsedPercent,
-		DiskUsage:   du.Used,
-		DiskPercent: du.UsedPercent,
+		CpuPercent: fmt.Sprint(cp[0]),
+		MemUsage:   vm.Used,
+		DiskUsage:  du.Used,
 		//Disks:          disks,
 		//Processes:      proc,
 		NetPacketsSent: nio[0].PacketsSent,
-		NetBytesSent:   nio[0].BytesSent,
+		//NetBytesSent:   nio[0].BytesSent,
 		NetPacketsRecv: nio[0].PacketsRecv,
-		NetBytesRecv:   nio[0].BytesRecv,
+		//NetBytesRecv:   nio[0].BytesRecv,
 		//NetInterfaces:  inets,
 		//NetConnections: conns,
+	}
+}
+
+func StartMonitor() {
+
+	// Goroutines to receive events
+	go watchNewEvent()
+	go watchRequiredReplies()
+	go watchRequiredVotes()
+	go watchEventSolved()
+
+	// Get and parse monitor time interval
+	//inter, err := strconv.ParseInt(os.Getenv("MONITOR_INTERVAL"), 10, 64)
+	//utils.CheckError(err, utils.WarningMode)
+
+	// Main infinite loop
+	for {
+		//time.Sleep(time.Duration(inter) * time.Millisecond)
+
+		// Get node state and check policies
+		nodeState := getHostState()
+		fmt.Println(*nodeState)
+
+		/*array := [...]string{"cpu", "mem", "disk", "pkt_sent", "pkt_recv"}
+		rand.Seed(time.Now().UnixNano())
+		spec := array[rand.Intn(5)]
+
+		// Send event
+		det := types.EventType{
+			Spec: spec,
+			Task: "migrate",
+			Metadata: map[string]string{
+				"docker_image": "12345678",
+			},
+		}
+
+		sendEvent(&det, nodeState)*/
 	}
 }

@@ -1,5 +1,4 @@
 pragma solidity ^0.6.6;
-pragma experimental ABIEncoderV2;
 
 
 contract Node {
@@ -10,28 +9,21 @@ contract Node {
     address private controller;
 
     // Node reputation
-    uint64 private reputation;
+    int64 private reputation;
 
-    // Node specifications structure
-    struct Specs {
-        string arch;
-        uint64 cores; // Logical cores number
-        string mhz; // Physical cores frequency
-        uint64 memTotal; // In bytes
-        uint64 diskTotal; // In bytes
-        string fileSystem;
-        string OS;
-        string hostname;
-        uint64 bootTime; // Unix time
-    }
-
-    Specs private nodeSpecs;
+    // Node specifications
+    string public nodeSpecs;
 
     // Constructor
-    constructor(address _owner) public {
-        owner = _owner;
+    constructor(address nodeAddr, string memory specs) public {
+        owner = nodeAddr;
         controller = msg.sender;
+
+        // Reputation by default
         reputation = 100;
+
+        // First specifications update
+        nodeSpecs = specs;
     }
 
     // Modifiers
@@ -49,33 +41,15 @@ contract Node {
     }
 
     // Functions
-    function getReputation() public view returns (uint64) {
+    function getReputation() public view returns (int64) {
         return reputation;
     }
 
-    function setSpecs(
-        string memory _arch,
-        uint64 _cores,
-        string memory _mhz,
-        uint64 _memTotal,
-        uint64 _diskTotal,
-        string memory _fileSystem,
-        string memory _OS,
-        string memory _hostname,
-        uint64 _bootTime
-    ) public onlyOwner {
-        nodeSpecs.arch = _arch;
-        nodeSpecs.cores = _cores;
-        nodeSpecs.mhz = _mhz;
-        nodeSpecs.memTotal = _memTotal;
-        nodeSpecs.diskTotal = _diskTotal;
-        nodeSpecs.fileSystem = _fileSystem;
-        nodeSpecs.OS = _OS;
-        nodeSpecs.hostname = _hostname;
-        nodeSpecs.bootTime = _bootTime;
+    function updateSpecs(string memory specs) public onlyOwner {
+        nodeSpecs = specs;
     }
 
-    function getSpecs() public view returns (Specs memory) {
-        return nodeSpecs;
+    function setVariation(int64 variation) public onlyController {
+        reputation += variation;
     }
 }

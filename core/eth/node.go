@@ -5,10 +5,10 @@ import (
 	"github.com/swarleynunez/superfog/core/utils"
 )
 
-func Connect(url string) (c *ethclient.Client) {
+func Connect(url string) (ethc *ethclient.Client) {
 
-	c, err := ethclient.Dial(url)
-	utils.CheckError(err, utils.FatalMode)
+	ethc, err := ethclient.Dial(url)
+	utils.CheckError(err, utils.WarningMode)
 
 	return
 }

@@ -1,66 +1,52 @@
 package main
 
 import (
-	"fmt"
 	"github.com/swarleynunez/superfog/core/daemons"
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/utils"
-	"time"
-)
-
-const (
-	EthNodeIp      = "127.0.0.1"
-	EthNodePort    = 7545
-	EthNodeDir     = ".ethereum"
-	EthKeystoreDir = "keystore"
-
-	AccountPassphrase = "12345678"
-
-	MonitorInterval = 1 * time.Second
+	"os"
 )
 
 func init() {
 
+	// Load .env configuration
+	utils.LoadEnv()
 }
 
 func main() {
 
-	fmt.Println(time.Now().Unix())
+	// Environment variables
+	var (
+		nodeDir = os.Getenv("ETH_NODE_DIR")
+		addr    = os.Getenv("NODE_ADDR")
+		pass    = os.Getenv("NODE_ADDR_PASS")
+	)
 
 	// Connect to the Ethereum node
-	url := utils.FormatUrl(EthNodeIp, EthNodePort, utils.HttpMode)
-	client := eth.Connect(url)
-	_ = client
+	ethc := eth.Connect(utils.FormatPath(nodeDir, "geth.ipc"))
 
-	// Gets the path to keystore directory
-	keydir := utils.FormatPath(EthNodeDir, EthKeystoreDir)
+	// Load keystore
+	keypath := utils.FormatPath(nodeDir, "keystore")
+	ks := eth.LoadKeystore(keypath)
 
-	// Load the keystore
-	ks := eth.LoadKeystore(keydir)
-	_ = ks
+	// Load and unlock an account
+	from := eth.LoadAccount(ks, addr, pass)
 
-	// Create an account
-	//account0 := eth.CreateAccount(ks, AccountPassphrase)
-	//fmt.Println(account0)
+	// Initialize manager
+	daemons.Init(ethc, ks, from)
 
-	// Sending ether
-	//toAddress := common.HexToAddress("0x124dfc4Fba0eB7EB185b3CdcB0F91Dc273826AC6")
-	//eth.SendTxn(client, ks, toAddress, AccountPassphrase, 1000000000000000000)
+	// Register node
+	daemons.RegisterNode()
 
-	// Initialize host state (specs and first state)
-	nodeSpecs, nodeState := daemons.InitState()
+	// Main loop
+	daemons.StartMonitor()
 
-	time.Sleep(1 * time.Second)
-
-	// Update host state
-	nodeState = daemons.UpdateState()
-
-	fmt.Println(*nodeSpecs)
-	fmt.Println(*nodeState)
-
-	//for {
-	//	select {}
-	//}
-
-	fmt.Println(time.Now().Unix())
+	///////////////
+	//// Other ////
+	///////////////
+	// Send ether
+	//wei := new(big.Int)
+	//wei.SetString("10000000000000000000", 10)
+	//to := common.HexToAddress("0x5cb50d3E5a4666FD90c4E6226942EE47eF400348")
+	//eth.SendEther(ethc, from, to, wei, ks, pass)
 }

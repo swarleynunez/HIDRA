@@ -1,24 +1,22 @@
 pragma solidity ^0.6.6;
 
-import "./NetworkState.sol";
 
-
-library EventHandler {
+library Event {
     // Node events structure
-    struct Event {
-        uint64 typeId; // "Client" constant list
+    struct NodeEvent {
+        string dynType; // Encoded dynamic event type
         address sender;
         uint64 createdAt; // Unix time
         address solver;
         uint64 solvedAt; // Unix time
-        mapping(address => Reply) replies; // Replies by each node address
+        Reply[] replies; // Set of node replies
     }
 
     // Network nodes replies to an event
     struct Reply {
-        NetworkState.NodeState state;
+        address sender;
+        string nodeState; // Encoded
         uint64 createdAt; // Unix time
+        address[] voters;
     }
-
-    // Functions
 }
