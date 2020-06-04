@@ -2,6 +2,32 @@ package types
 
 import "github.com/ethereum/go-ethereum/common"
 
+// Event tasks for run
+type Task uint8
+
+const (
+	CreateTask Task = iota
+	ReadTask
+	UpdateTask
+	DeleteTask
+	ReloadTask
+	StartTask
+	StopTask
+	RestartTask
+	MigrateTask
+	KillTask
+	PingTask
+	GetTask  // Downloading
+	PostTask // Uploading
+)
+
+// Dynamic event types. To send within events
+type EventType struct {
+	Spec     Spec                   `json:"spec"`
+	Task     Task                   `json:"task"`
+	Metadata map[string]interface{} `json:"meta"` // Present and future metadata
+}
+
 // Network nodes events
 type Event struct {
 	DynType   string // Encoded dynamic event type
@@ -17,11 +43,4 @@ type Reply struct {
 	NodeState string // Encoded node state
 	CreatedAt uint64 // Unix time
 	Voters    []common.Address
-}
-
-// Dynamic event types. To send within events
-type EventType struct {
-	Spec     string            `json:"spec"` // cpu, mem, disk...
-	Task     string            `json:"task"` // create, read, update, delete, migrate, kill, ping...
-	Metadata map[string]string `json:"meta"` // Present and future metadata
 }

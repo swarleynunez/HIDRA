@@ -1,7 +1,13 @@
 package daemons
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/host"
@@ -9,9 +15,20 @@ import (
 	"github.com/shirou/gopsutil/net"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
+	"io"
+	"io/ioutil"
 )
 
-func firstHostState() (*types.NodeSpecs, *types.NodeState) {
+// Hysteresis cycles
+type cycleCounter struct {
+	measures uint64
+	triggers uint64
+}
+
+// Hysteresis cycles by rule name
+type cycles map[string]cycleCounter
+
+func getSpecs() *types.NodeSpecs {
 
 	hi, err := host.Info()
 	utils.CheckError(err, utils.WarningMode)
@@ -28,10 +45,10 @@ func firstHostState() (*types.NodeSpecs, *types.NodeState) {
 	du, err := disk.Usage("/") // File system root path
 	utils.CheckError(err, utils.WarningMode)
 
-	specs := &types.NodeSpecs{
+	return &types.NodeSpecs{
 		Arch:       hi.KernelArch,
 		Cores:      uint64(cores),
-		Mhz:        fmt.Sprint(ci[0].Mhz),
+		Mhz:        ci[0].Mhz,
 		MemTotal:   vm.Total,
 		DiskTotal:  du.Total,
 		FileSystem: du.Fstype,
@@ -39,11 +56,9 @@ func firstHostState() (*types.NodeSpecs, *types.NodeState) {
 		Hostname:   hi.Hostname,
 		BootTime:   hi.BootTime,
 	}
-
-	return specs, getHostState()
 }
 
-func getHostState() *types.NodeState {
+func getState() *types.NodeState {
 
 	cp, err := cpu.Percent(0, false) // Total CPU usage (all cores)
 	utils.CheckError(err, utils.WarningMode)
@@ -97,7 +112,7 @@ func getHostState() *types.NodeState {
 	//}
 
 	return &types.NodeState{
-		CpuPercent: fmt.Sprint(cp[0]),
+		CpuPercent: cp[0],
 		MemUsage:   vm.Used,
 		DiskUsage:  du.Used,
 		//Disks:          disks,
@@ -113,37 +128,99 @@ func getHostState() *types.NodeState {
 
 func StartMonitor() {
 
-	// Goroutines to receive events
+	/*// Goroutines to receive events
 	go watchNewEvent()
 	go watchRequiredReplies()
 	go watchRequiredVotes()
 	go watchEventSolved()
 
 	// Get and parse monitor time interval
-	//inter, err := strconv.ParseInt(os.Getenv("MONITOR_INTERVAL"), 10, 64)
-	//utils.CheckError(err, utils.WarningMode)
+	mInter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Get and parse cycle time
+	cTime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Node rule cycles
+	cycles := cycles{}
 
 	// Main infinite loop
 	for {
-		//time.Sleep(time.Duration(inter) * time.Millisecond)
+		time.Sleep(time.Duration(mInter) * time.Millisecond)
 
-		// Get node state and check policies
-		nodeState := getHostState()
-		fmt.Println(*nodeState)
+		// Check all state rules
+		checkStateRules(cycles, mInter, cTime)
+	}*/
 
-		/*array := [...]string{"cpu", "mem", "disk", "pkt_sent", "pkt_recv"}
-		rand.Seed(time.Now().UnixNano())
-		spec := array[rand.Intn(5)]
+	test()
+}
 
-		// Send event
-		det := types.EventType{
-			Spec: spec,
-			Task: "migrate",
-			Metadata: map[string]string{
-				"docker_image": "12345678",
+func test() {
+
+	// Connect to the Docker node
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	utils.CheckError(err, utils.WarningMode)
+
+	// Variables
+	ctx := context.Background()
+	image := "nginx"
+
+	// Pull a docker image
+	out, err := cli.ImagePull(ctx, image, dockertypes.ImagePullOptions{})
+	utils.CheckError(err, utils.WarningMode)
+	_, err = io.Copy(ioutil.Discard, out)
+	utils.CheckError(err, utils.WarningMode)
+
+	// List images
+	images, err := cli.ImageList(ctx, dockertypes.ImageListOptions{All: true})
+	utils.CheckError(err, utils.WarningMode)
+	for i := range images {
+		fmt.Println(images[i].RepoTags)
+	}
+
+	// Delete all containers
+	containers, err := cli.ContainerList(ctx, dockertypes.ContainerListOptions{All: true})
+	utils.CheckError(err, utils.WarningMode)
+	for i := range containers {
+		err = cli.ContainerRemove(ctx, containers[i].ID, dockertypes.ContainerRemoveOptions{Force: true})
+		utils.CheckError(err, utils.WarningMode)
+	}
+
+	// Set container options
+	config := &container.Config{Image: image}
+	hostConfig := &container.HostConfig{
+		PortBindings: nat.PortMap{
+			"80/tcp": []nat.PortBinding{
+				{
+					HostPort: "8080",
+				},
 			},
-		}
+		},
+		AutoRemove: true,
+	}
 
-		sendEvent(&det, nodeState)*/
+	// Create container
+	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	utils.CheckError(err, utils.WarningMode)
+	fmt.Println(resp.ID)
+
+	// Run container
+	err = cli.ContainerStart(ctx, resp.ID, dockertypes.ContainerStartOptions{})
+	utils.CheckError(err, utils.WarningMode)
+
+	//
+	containers, err = cli.ContainerList(ctx, dockertypes.ContainerListOptions{All: true})
+	utils.CheckError(err, utils.WarningMode)
+	for i := range containers {
+		fmt.Print("INFO: ", containers[i], "\n")
+
+		stats, err := cli.ContainerStatsOneShot(ctx, containers[i].ID)
+		utils.CheckError(err, utils.WarningMode)
+
+		var containerStats map[string]interface{}
+		err = json.NewDecoder(stats.Body).Decode(&containerStats)
+		utils.CheckError(err, utils.WarningMode)
+		fmt.Println(containerStats)
 	}
 }

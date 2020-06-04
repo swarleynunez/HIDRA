@@ -2,9 +2,18 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/swarleynunez/superfog/core/types"
 	"os"
 	"path"
 	"regexp"
+)
+
+var (
+	errUnknownComp   = errors.New("unknown comparator")
+	errMismatchTypes = errors.New("mismatch value types")
+	errUnknownType   = errors.New("unknown value type")
 )
 
 func FormatPath(paths ...string) (p string) {
@@ -19,12 +28,15 @@ func FormatPath(paths ...string) (p string) {
 	return
 }
 
-func ValidEthAddress(addr string) (r bool) {
+func EmptyEthAddress(addr string) bool {
+
+	return addr == new(common.Address).String()
+}
+
+func ValidEthAddress(addr string) bool {
 
 	re := regexp.MustCompile("^(?i)(0x)?[0-9a-f]{40}$") // (?i) case insensitive, (0x)? optional hex prefix
-	r = re.MatchString(addr)
-
-	return
+	return re.MatchString(addr)
 }
 
 func MarshalJSON(v interface{}) string {
@@ -44,4 +56,88 @@ func UnmarshalJSON(data string, v interface{}) {
 	// Decode JSON to any struct
 	err := json.Unmarshal(bytes, v)
 	CheckError(err, WarningMode)
+}
+
+func CompareValues(value interface{}, comp types.Comparator, bound interface{}) (r bool, err error) {
+
+	// Uint64 assertion
+	if v, ok := value.(uint64); ok {
+		if b, ok := bound.(uint64); ok {
+			switch comp {
+			case types.EqualComp:
+				r = v == b
+			case types.NotEqualComp:
+				r = v != b
+			case types.LessComp:
+				r = v < b
+			case types.LessOrEqualComp:
+				r = v <= b
+			case types.GreaterComp:
+				r = v > b
+			case types.GreaterOrEqualComp:
+				r = v >= b
+			default:
+				err = errUnknownComp
+			}
+		} else {
+			err = errMismatchTypes
+		}
+
+		return
+	}
+
+	// Float64 assertion
+	if v, ok := value.(float64); ok {
+		if b, ok := bound.(float64); ok {
+			switch comp {
+			case types.EqualComp:
+				r = v == b
+			case types.NotEqualComp:
+				r = v != b
+			case types.LessComp:
+				r = v < b
+			case types.LessOrEqualComp:
+				r = v <= b
+			case types.GreaterComp:
+				r = v > b
+			case types.GreaterOrEqualComp:
+				r = v >= b
+			default:
+				err = errUnknownComp
+			}
+		} else {
+			err = errMismatchTypes
+		}
+
+		return
+	}
+
+	// String assertion
+	if v, ok := value.(string); ok {
+		if b, ok := bound.(string); ok {
+			switch comp {
+			case types.EqualComp:
+				r = v == b
+			case types.NotEqualComp:
+				r = v != b
+			case types.LessComp:
+				r = v < b
+			case types.LessOrEqualComp:
+				r = v <= b
+			case types.GreaterComp:
+				r = v > b
+			case types.GreaterOrEqualComp:
+				r = v >= b
+			default:
+				err = errUnknownComp
+			}
+		} else {
+			err = errMismatchTypes
+		}
+
+		return
+	}
+
+	err = errUnknownType
+	return
 }

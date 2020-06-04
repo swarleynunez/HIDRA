@@ -7,13 +7,10 @@ import (
 	"os"
 )
 
-func init() {
+func main() {
 
 	// Load .env configuration
 	utils.LoadEnv()
-}
-
-func main() {
 
 	// Environment variables
 	var (
@@ -32,11 +29,8 @@ func main() {
 	// Load and unlock an account
 	from := eth.LoadAccount(ks, addr, pass)
 
-	// Initialize manager
+	// Initialize node
 	daemons.Init(ethc, ks, from)
-
-	// Register node
-	daemons.RegisterNode()
 
 	// Main loop
 	daemons.StartMonitor()

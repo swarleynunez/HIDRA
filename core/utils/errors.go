@@ -12,9 +12,9 @@ const (
 	PanicMode
 	FatalMode
 
-	BlueFormat   = "\033[1;34m%s:%d %s\033[0m"
-	YellowFormat = "\033[1;33m%s:%d %s\033[0m"
-	RedFormat    = "\033[1;31m%s:%d %s\033[0m"
+	blueFormat   = "\033[1;34m%s:%d %s\033[0m"
+	yellowFormat = "\033[1;33m%s:%d %s\033[0m"
+	redFormat    = "\033[1;31m%s:%d %s\033[0m"
 )
 
 func CheckError(err error, mode int) {
@@ -28,13 +28,13 @@ func CheckError(err error, mode int) {
 		switch mode {
 
 		case InfoMode:
-			log.Printf(BlueFormat, file, line, err)
+			log.Printf(blueFormat, file, line, err)
 		case WarningMode:
-			log.Printf(YellowFormat, file, line, err)
-		case PanicMode:
-			log.Panicf(RedFormat, file, line, err)
+			log.Printf(redFormat, file, line, err)
+		case PanicMode: // To recover control
+			log.Panicf(redFormat, file, line, err)
 		case FatalMode:
-			log.Fatalf(RedFormat, file, line, err)
+			log.Fatalf(redFormat, file, line, err)
 		}
 	}
 }
