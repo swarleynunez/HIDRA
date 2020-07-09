@@ -1,6 +1,5 @@
 pragma solidity ^0.6.6;
 
-
 contract Faucet {
     // Limit, reward and penalty reputations for system actions
     struct ActionReps {
@@ -18,6 +17,8 @@ contract Faucet {
         actions["sendReply"] = ActionReps(100, 1);
         actions["voteSolver"] = ActionReps(100, 1);
         actions["solveEvent"] = ActionReps(100, 1);
+        actions["recordContainer"] = ActionReps(100, 1);
+        actions["removeContainer"] = ActionReps(100, 1);
     }
 
     // Functions

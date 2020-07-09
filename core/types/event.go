@@ -21,13 +21,6 @@ const (
 	PostTask // Uploading
 )
 
-// Dynamic event types. To send within events
-type EventType struct {
-	Spec     Spec                   `json:"spec"`
-	Task     Task                   `json:"task"`
-	Metadata map[string]interface{} `json:"meta"` // Present and future metadata
-}
-
 // Network nodes events
 type Event struct {
 	DynType   string // Encoded dynamic event type
@@ -35,6 +28,13 @@ type Event struct {
 	CreatedAt uint64 // Unix time
 	Solver    common.Address
 	SolvedAt  uint64 // Unix time
+}
+
+// Dynamic event types
+type EventType struct {
+	Spec     Spec                   `json:"spec"` // Problematic spec
+	Task     Task                   `json:"task"`
+	Metadata map[string]interface{} `json:"meta"` // Realtime metadata (container id, suggestions to solver)
 }
 
 // Network nodes replies to an event

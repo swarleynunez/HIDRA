@@ -1,6 +1,5 @@
 pragma solidity ^0.6.6;
 
-
 contract Node {
     // Contract owner address (node)
     address private owner;

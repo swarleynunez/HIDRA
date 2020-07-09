@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"github.com/swarleynunez/superfog/core/daemons"
+	"github.com/swarleynunez/superfog/core/docker"
 	"github.com/swarleynunez/superfog/core/eth"
+	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/utils"
 	"os"
 )
@@ -12,7 +15,6 @@ func main() {
 	// Load .env configuration
 	utils.LoadEnv()
 
-	// Environment variables
 	var (
 		nodeDir = os.Getenv("ETH_NODE_DIR")
 		addr    = os.Getenv("NODE_ADDR")
@@ -22,6 +24,9 @@ func main() {
 	// Connect to the Ethereum node
 	ethc := eth.Connect(utils.FormatPath(nodeDir, "geth.ipc"))
 
+	// Connect to the Docker node
+	dcli := docker.Connect()
+
 	// Load keystore
 	keypath := utils.FormatPath(nodeDir, "keystore")
 	ks := eth.LoadKeystore(keypath)
@@ -29,11 +34,11 @@ func main() {
 	// Load and unlock an account
 	from := eth.LoadAccount(ks, addr, pass)
 
-	// Initialize node
-	daemons.Init(ethc, ks, from)
+	// Initialize and configure node
+	managers.InitNode(ethc, dcli, ks, from)
 
 	// Main loop
-	daemons.StartMonitor()
+	daemons.StartMonitor(context.Background())
 
 	///////////////
 	//// Other ////

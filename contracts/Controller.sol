@@ -5,7 +5,7 @@ import "./Faucet.sol";
 import "./State.sol";
 import "./Node.sol";
 import "./Event.sol";
-
+import "./Container.sol";
 
 contract Controller {
     // Faucet smart contract instance
@@ -20,11 +20,19 @@ contract Controller {
     // Event list
     mapping(uint64 => Event.NodeEvent) public events;
 
-    // Solidity events
+    // Container registry
+    mapping(uint64 => Container.NodeContainer) public containers;
+    uint64[] private activeCtrs;
+
+    // Main flow events
     event NewEvent(uint64 eventId);
     event RequiredReplies(uint64 eventId);
     event RequiredVotes(uint64 eventId, address solver);
     event EventSolved(uint64 eventId, address sender);
+
+    // Container events
+    event NewContainer(uint64 registryCtrId, string ctrId, address host);
+    event ContainerRemoved(uint64 registryCtrId);
 
     // Constructor
     constructor() public {
@@ -32,7 +40,7 @@ contract Controller {
         faucet = new Faucet();
 
         // Initialize global network state
-        state = State.GlobalState(0, 0);
+        state = State.GlobalState(0, 0, 0);
     }
 
     // Functions
@@ -275,6 +283,97 @@ contract Controller {
         return false;
     }
 
+    // Reputable
+    function recordContainer(
+        string memory _info,
+        uint64 _startedAt,
+        string memory ctrId
+    ) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("recordContainer") // Required reputation to register containers
+            ),
+            "The node has not enough reputation"
+        );
+
+        // Register a new container
+        containers[state.nextRegistryCtrId].host = msg.sender;
+        containers[state.nextRegistryCtrId].info = _info;
+        containers[state.nextRegistryCtrId].startedAt = _startedAt;
+
+        // Set container as active
+        activeCtrs.push(state.nextRegistryCtrId);
+
+        emit NewContainer(state.nextRegistryCtrId, ctrId, msg.sender);
+
+        state.nextRegistryCtrId++;
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "recordContainer");
+    }
+
+    // Reputable
+    function removeContainer(uint64 registryCtrId, uint64 _finishedAt) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("removeContainer") // Required reputation to remove containers
+            ),
+            "The node has not enough reputation"
+        );
+        require(existContainer(registryCtrId), "The container does not exist");
+        require(
+            isContainerHost(msg.sender, registryCtrId),
+            "The node is not the container host"
+        );
+        require(
+            isContainerActive(registryCtrId),
+            "The container is not active"
+        );
+
+        // Set container removal time and deactivate it
+        containers[registryCtrId].finishedAt = _finishedAt;
+        deactivateContainer(registryCtrId);
+
+        emit ContainerRemoved(registryCtrId);
+
+        // Update the sender reputation
+        updateReputation(msg.sender, "removeContainer");
+    }
+
+    function existContainer(uint64 registryCtrId) public view returns (bool) {
+        if (containers[registryCtrId].host != address(0)) return true;
+        return false;
+    }
+
+    function isContainerActive(uint64 registryCtrId)
+        public
+        view
+        returns (bool)
+    {
+        for (uint64 i = 0; i < activeCtrs.length; i++) {
+            if (activeCtrs[i] == registryCtrId) return true;
+        }
+
+        return false;
+    }
+
+    function isContainerHost(address nodeAddr, uint64 registryCtrId)
+        public
+        view
+        returns (bool)
+    {
+        if (containers[registryCtrId].host == nodeAddr) return true;
+        return false;
+    }
+
+    function getActiveContainers() public view returns (uint64[] memory) {
+        return activeCtrs;
+    }
+
     // Private functions
     function hasRequiredCount(uint64 count) private view returns (bool) {
         // TODO (51%, 66%)
@@ -288,5 +387,14 @@ contract Controller {
         Node nc = Node(nodes[nodeAddr]);
 
         nc.setVariation(faucet.getActionVariation(action));
+    }
+
+    function deactivateContainer(uint64 registryCtrId) private {
+        for (uint64 i = 0; i < activeCtrs.length; i++) {
+            if (activeCtrs[i] == registryCtrId) {
+                activeCtrs[i] = activeCtrs[activeCtrs.length - 1];
+                activeCtrs.pop();
+            }
+        }
     }
 }

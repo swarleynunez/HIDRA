@@ -1,12 +1,23 @@
 package types
 
+// Specification types
+type Spec uint8
+
+const (
+	CpuSpec Spec = iota
+	MemSpec
+	DiskSpec
+	PktSentSpec
+	PktRecvSpec
+)
+
 // Rule metric type for each spec
 type MetricType uint8
 
 const (
-	UnitsType MetricType = iota
-	PercentType
-	TagType
+	UnitsMetric MetricType = iota
+	PercentMetric
+	TagMetric
 )
 
 // Rule comparison operators

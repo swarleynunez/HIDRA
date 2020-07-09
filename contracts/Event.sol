@@ -1,6 +1,5 @@
 pragma solidity ^0.6.6;
 
-
 library Event {
     // Node events structure
     struct NodeEvent {

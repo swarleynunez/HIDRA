@@ -3,11 +3,13 @@ package utils
 import (
 	"encoding/json"
 	"errors"
+	"github.com/docker/distribution/reference"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/types"
 	"os"
 	"path"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -16,18 +18,48 @@ var (
 	errUnknownType   = errors.New("unknown value type")
 )
 
-func FormatPath(paths ...string) (p string) {
+// Docker metadata
+var (
+	defaultDomain    = "docker.io"
+	officialRepoName = "library"
+)
 
-	p, err := os.UserHomeDir()
+////////////////
+// Formatters //
+////////////////
+func FormatPath(paths ...string) (r string) {
+
+	r, err := os.UserHomeDir()
 	CheckError(err, WarningMode)
 
 	for _, v := range paths {
-		p = path.Join(p, v)
+		r = path.Join(r, v)
 	}
 
 	return
 }
 
+func FormatImageTag(imgTag string) (r string, err error) {
+
+	// Convert tag to full name
+	named, err := reference.ParseNormalizedNamed(imgTag)
+	if err != nil {
+		return
+	}
+
+	// Add "latest" tag if no tag found
+	named = reference.TagNameOnly(named)
+
+	// Remove domain and repository name from full name
+	r = strings.TrimPrefix(named.String(), defaultDomain+"/")
+	r = strings.TrimPrefix(r, officialRepoName+"/")
+
+	return
+}
+
+//////////////
+// Checkers //
+//////////////
 func EmptyEthAddress(addr string) bool {
 
 	return addr == new(common.Address).String()
@@ -37,25 +69,6 @@ func ValidEthAddress(addr string) bool {
 
 	re := regexp.MustCompile("^(?i)(0x)?[0-9a-f]{40}$") // (?i) case insensitive, (0x)? optional hex prefix
 	return re.MatchString(addr)
-}
-
-func MarshalJSON(v interface{}) string {
-
-	// Encode any struct to JSON
-	bytes, err := json.Marshal(v)
-	CheckError(err, WarningMode)
-
-	return string(bytes)
-}
-
-func UnmarshalJSON(data string, v interface{}) {
-
-	// String to bytes slice
-	bytes := []byte(data)
-
-	// Decode JSON to any struct
-	err := json.Unmarshal(bytes, v)
-	CheckError(err, WarningMode)
 }
 
 func CompareValues(value interface{}, comp types.Comparator, bound interface{}) (r bool, err error) {
@@ -140,4 +153,26 @@ func CompareValues(value interface{}, comp types.Comparator, bound interface{}) 
 
 	err = errUnknownType
 	return
+}
+
+//////////////
+// Encoding //
+//////////////
+func MarshalJSON(v interface{}) string {
+
+	// Encode any struct to JSON
+	bytes, err := json.Marshal(v)
+	CheckError(err, WarningMode)
+
+	return string(bytes)
+}
+
+func UnmarshalJSON(data string, v interface{}) {
+
+	// String to bytes slice
+	bytes := []byte(data)
+
+	// Decode JSON to any struct
+	err := json.Unmarshal(bytes, v)
+	CheckError(err, WarningMode)
 }

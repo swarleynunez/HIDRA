@@ -1,9 +1,12 @@
 package daemons
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/swarleynunez/superfog/core/bindings"
+	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/policies"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
@@ -19,9 +22,9 @@ var (
 	errUnknownAction       = errors.New("unknown rule action")
 )
 
-func checkStateRules(cycles cycles, mInter, cTime uint64) {
+func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 
-	state := getState()
+	state := managers.GetNodeState()
 
 	for _, r := range policies.Rules {
 
@@ -70,7 +73,7 @@ func checkStateRules(cycles cycles, mInter, cTime uint64) {
 
 			// TODO. Rcc checking
 			if cc.measures == cTime/mInter && cc.measures == cc.triggers {
-				runRuleAction(&r, state, now)
+				runRuleAction(ctx, &r, state, now)
 			}
 		} else {
 			utils.CheckError(err, utils.WarningMode)
@@ -86,20 +89,20 @@ func checkStateRules(cycles cycles, mInter, cTime uint64) {
 	}
 }
 
-func runRuleAction(rule *types.Rule, state *types.NodeState, now interface{}) {
+func runRuleAction(ctx context.Context, rule *types.Rule, state *types.State, now interface{}) {
 
 	switch rule.Action {
 	case types.SendEventAction:
 		etype := types.EventType{
 			Spec: rule.Spec,
-			Task: types.CreateTask,
+			Task: types.MigrateTask,
 			Metadata: map[string]interface{}{
-				"docker_image": 12345678,
+				"docker_image": "nginx",
 			},
 		}
-		sendEvent(&etype, state)
+		managers.SendEvent(&etype, state)
 	case types.ProceedAction:
-		runTask(types.CreateTask)
+		managers.RunTask(ctx, types.CreateTask)
 		fallthrough
 	case types.LogAction:
 		// Save log into a file, send log to a remote server...
@@ -114,34 +117,18 @@ func runRuleAction(rule *types.Rule, state *types.NodeState, now interface{}) {
 	}
 }
 
-// Functions to run node management tasks
-func runTask(task types.Task) {
-
-	fmt.Print("DEBUG: Running task\n")
-}
-
-func runEventTask(eid uint64, task types.Task) {
-
-	fmt.Print("DEBUG: Running event task (EID=", eid, ")\n")
-}
-
-func runEventEndingTask(eid uint64, task types.Task) {
-
-	fmt.Print("DEBUG: Running event ending task (EID=", eid, ")\n")
-}
-
 // Select the best event solver according to spec metrics
-func selectBestSolver(eid uint64) (addr common.Address) {
+func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Address) {
 
 	// Get related event header
-	event := getEvent(eid)
+	event := managers.GetEvent(eid)
 
 	// Decode dynamic event type
 	var etype types.EventType
 	utils.UnmarshalJSON(event.DynType, &etype)
 
 	// Get event replies
-	replies, err := _cinst.GetEventReplies(nil, eid)
+	replies, err := cinst.GetEventReplies(nil, eid)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Current best value (variable for different value types)
@@ -149,11 +136,11 @@ func selectBestSolver(eid uint64) (addr common.Address) {
 
 	for _, v := range replies {
 
-		// Get reply node specs
-		ns := getNodeSpecs(v.Sender)
+		// Get replier specs
+		ns := managers.GetSpecs(v.Sender)
 
 		// Decode reply node state
-		var state types.NodeState
+		var state types.State
 		utils.UnmarshalJSON(v.NodeState, &state)
 
 		var met interface{}
@@ -162,7 +149,7 @@ func selectBestSolver(eid uint64) (addr common.Address) {
 		// Select metric and comparator
 		switch etype.Spec {
 		case types.CpuSpec:
-			met = state.CpuPercent / ns.Mhz // Ratio
+			met = state.CpuPercent / ns.CpuMhz // Ratio
 			comp = types.LessComp
 		case types.MemSpec:
 			met = ns.MemTotal - state.MemUsage // Free memory
@@ -198,60 +185,58 @@ func selectBestSolver(eid uint64) (addr common.Address) {
 }
 
 // Functions to select the spec metric type depending on the rule bound type
-func selectCpuMetric(mt types.MetricType, state *types.NodeState) (now interface{}) {
+func selectCpuMetric(mt types.MetricType, state *types.State) (now interface{}) {
 
 	switch mt {
-	case types.PercentType:
+	case types.PercentMetric:
 		now = state.CpuPercent // Usage %
 	}
 
 	return
 }
 
-func selectMemMetric(mt types.MetricType, state *types.NodeState) (now interface{}) {
+func selectMemMetric(mt types.MetricType, state *types.State) (now interface{}) {
 
-	// Get node specs
-	specs := getSpecs()
+	specs := managers.GetNodeSpecs()
 
 	switch mt {
-	case types.UnitsType:
+	case types.UnitsMetric:
 		now = state.MemUsage // Bytes
-	case types.PercentType:
+	case types.PercentMetric:
 		now = (float64(state.MemUsage) / float64(specs.MemTotal)) * 100.0
 	}
 
 	return
 }
 
-func selectDiskMetric(mt types.MetricType, state *types.NodeState) (now interface{}) {
+func selectDiskMetric(mt types.MetricType, state *types.State) (now interface{}) {
 
-	// Get node specs
-	specs := getSpecs()
+	specs := managers.GetNodeSpecs()
 
 	switch mt {
-	case types.UnitsType:
+	case types.UnitsMetric:
 		now = state.DiskUsage // Bytes
-	case types.PercentType:
+	case types.PercentMetric:
 		now = (float64(state.DiskUsage) / float64(specs.DiskTotal)) * 100.0
 	}
 
 	return
 }
 
-func selectPktSentMetric(mt types.MetricType, state *types.NodeState) (now interface{}) {
+func selectPktSentMetric(mt types.MetricType, state *types.State) (now interface{}) {
 
 	switch mt {
-	case types.UnitsType:
+	case types.UnitsMetric:
 		now = state.NetPacketsSent // Packet count
 	}
 
 	return
 }
 
-func selectPktRecvMetric(mt types.MetricType, state *types.NodeState) (now interface{}) {
+func selectPktRecvMetric(mt types.MetricType, state *types.State) (now interface{}) {
 
 	switch mt {
-	case types.UnitsType:
+	case types.UnitsMetric:
 		now = state.NetPacketsRecv // Packet count
 	}
 
