@@ -38,15 +38,13 @@ func SendEther(ethc *ethclient.Client, from accounts.Account, to common.Address,
 	utils.CheckError(err, utils.WarningMode)
 }
 
-func GetTransactor(ks *keystore.KeyStore, from accounts.Account, ethc *ethclient.Client, gasLimit uint64) *bind.TransactOpts {
+func GetTransactor(ks *keystore.KeyStore, from accounts.Account, nonce uint64, ethc *ethclient.Client, gasLimit uint64) *bind.TransactOpts {
 
 	// Auth transactor type
 	auth, err := bind.NewKeyStoreTransactor(ks, from)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Set nonce
-	nonce, err := ethc.PendingNonceAt(context.Background(), from.Address)
-	utils.CheckError(err, utils.WarningMode)
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	// Set gas price

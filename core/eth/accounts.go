@@ -39,9 +39,10 @@ func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.
 		from = CreateAccount(ks, passphrase)
 	} else {
 		if utils.ValidEthAddress(addr) {
-			for i, v := range ks.Accounts() {
-				if v.Address == common.HexToAddress(addr) {
-					from = ks.Accounts()[i]
+			ksa := ks.Accounts()
+			for i := range ksa {
+				if ksa[i].Address == common.HexToAddress(addr) {
+					from = ksa[i]
 					break
 				}
 			}

@@ -37,8 +37,11 @@ func main() {
 	// Initialize and configure node
 	managers.InitNode(ethc, dcli, ks, from)
 
+	// Main function empty context
+	ctx := context.Background()
+
 	// Main loop
-	daemons.StartMonitor(context.Background())
+	daemons.StartMonitor(ctx)
 
 	///////////////
 	//// Other ////

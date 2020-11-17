@@ -13,7 +13,7 @@ library Event {
 
     // Network nodes replies to an event
     struct Reply {
-        address sender;
+        address replier;
         string nodeState; // Encoded
         uint64 createdAt; // Unix time
         address[] voters;

@@ -28,7 +28,8 @@ func controllerInstance() (cinst *bindings.Controller) {
 
 		// TODO
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, DeployControllerGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, DeployControllerGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Create smart contract
 		caddr, _, inst, err := bindings.DeployController(auth, _ethc)
@@ -71,7 +72,8 @@ func SendEvent(etype *types.EventType, state *types.State) {
 	if isNodeRegistered(_from.Address) && hasNodeReputation(limit) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, SendEventGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendEventGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		createdAt := uint64(time.Now().Unix())
@@ -92,7 +94,8 @@ func SendReply(eid uint64, state *types.State) {
 		!hasAlreadyReplied(eid, _from.Address) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, SendReplyGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendReplyGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		createdAt := uint64(time.Now().Unix())
@@ -114,7 +117,8 @@ func VoteSolver(eid uint64, addr common.Address) {
 		!hasAlreadyVoted(eid) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, VoteSolverGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, VoteSolverGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		_, err := _cinst.VoteSolver(auth, eid, addr)
@@ -134,7 +138,8 @@ func SolveEvent(eid uint64) {
 		canSolveEvent(eid) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, SolveEventGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SolveEventGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		solvedAt := uint64(time.Now().Unix())
@@ -152,7 +157,8 @@ func recordContainerOnReg(cinfo *types.ContainerInfo, startedAt uint64, cid stri
 	if isNodeRegistered(_from.Address) && hasNodeReputation(limit) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, RecordContainerGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RecordContainerGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		_, err := _cinst.RecordContainer(auth, utils.MarshalJSON(cinfo), startedAt, cid)
@@ -173,7 +179,8 @@ func removeContainerFromReg(rcid uint64, finishedAt uint64) {
 		isRegContainerActive(rcid) {
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, RemoveContainerGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RemoveContainerGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		_, err := _cinst.RemoveContainer(auth, rcid, finishedAt)
@@ -191,7 +198,8 @@ func registerNode() {
 		specs := GetNodeSpecs()
 
 		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _ethc, RegisterNodeGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RegisterNodeGasLimit)
+		_nonce++ // Next nonce to the next transaction
 
 		// Send transaction
 		_, err := _cinst.RegisterNode(auth, utils.MarshalJSON(specs))
@@ -253,7 +261,7 @@ func GetEvent(eid uint64) *types.Event {
 }
 
 // About distributed registry
-func GetRegActiveContainers() (ctrs []uint64) {
+func getRegActiveContainers() (ctrs []uint64) {
 
 	ctrs, err := _cinst.GetActiveContainers(nil)
 	utils.CheckError(err, utils.WarningMode)
@@ -262,7 +270,7 @@ func GetRegActiveContainers() (ctrs []uint64) {
 }
 
 // About distributed registry
-func GetRegContainer(rcid uint64) *types.Container {
+func getRegContainer(rcid uint64) *types.Container {
 
 	ctr, err := _cinst.Containers(nil, rcid)
 	utils.CheckError(err, utils.WarningMode)
@@ -271,6 +279,19 @@ func GetRegContainer(rcid uint64) *types.Container {
 	c := types.Container(ctr)
 
 	return &c
+}
+
+// About distributed registry
+func GetContainerReg() map[uint64]*types.Container {
+
+	ac := getRegActiveContainers()
+
+	ctrs := make(map[uint64]*types.Container)
+	for i := range ac {
+		ctrs[ac[i]] = getRegContainer(ac[i])
+	}
+
+	return ctrs
 }
 
 /////////////

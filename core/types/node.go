@@ -11,4 +11,7 @@ type NodeSpecs struct {
 	Os         string  `json:"os"`
 	Hostname   string  `json:"hostname"`
 	BootTime   uint64  `json:"boot"` // Unix time
+	// TODO: add IP?
+	// TODO: add latitude and longitude?
+	// TODO: delete hostname?
 }

@@ -32,8 +32,8 @@ func FormatPath(paths ...string) (r string) {
 	r, err := os.UserHomeDir()
 	CheckError(err, WarningMode)
 
-	for _, v := range paths {
-		r = path.Join(r, v)
+	for i := range paths {
+		r = path.Join(r, paths[i])
 	}
 
 	return

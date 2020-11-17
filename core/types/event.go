@@ -6,19 +6,21 @@ import "github.com/ethereum/go-ethereum/common"
 type Task uint8
 
 const (
+	// About web resources
 	CreateTask Task = iota
 	ReadTask
 	UpdateTask
 	DeleteTask
-	ReloadTask
-	StartTask
-	StopTask
-	RestartTask
-	MigrateTask
-	KillTask
-	PingTask
-	GetTask  // Downloading
-	PostTask // Uploading
+
+	// About containers
+	NewContainerTask
+	RestartContainerTask
+	StopContainerTask
+	MigrateContainerTask
+	DeleteContainerTask
+
+	// About nodes
+	PingNodeTask
 )
 
 // Network nodes events
@@ -32,14 +34,15 @@ type Event struct {
 
 // Dynamic event types
 type EventType struct {
-	Spec     Spec                   `json:"spec"` // Problematic spec
-	Task     Task                   `json:"task"`
+	Spec Spec `json:"spec"` // Problematic spec
+	Task Task `json:"task"`
+	// TODO
 	Metadata map[string]interface{} `json:"meta"` // Realtime metadata (container id, suggestions to solver)
 }
 
 // Network nodes replies to an event
 type Reply struct {
-	Sender    common.Address
+	Replier   common.Address
 	NodeState string // Encoded node state
 	CreatedAt uint64 // Unix time
 	Voters    []common.Address

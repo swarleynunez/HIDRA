@@ -2,6 +2,7 @@ package managers
 
 import (
 	"context"
+	"fmt"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -15,7 +16,7 @@ import (
 	"time"
 )
 
-var (
+const (
 	cnameTemplate = "registry_ctr_"
 )
 
@@ -46,6 +47,7 @@ func existImageLocally(ctx context.Context, imgTag string) bool {
 
 func pullImage(ctx context.Context, imgTag string) {
 
+	fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Downloading '"+imgTag+"' image...")
 	out, err := _dcli.ImagePull(ctx, imgTag, dockertypes.ImagePullOptions{})
 	utils.CheckError(err, utils.WarningMode)
 	_, err = io.Copy(ioutil.Discard, out) // Discard output to /dev/null
@@ -55,61 +57,81 @@ func pullImage(ctx context.Context, imgTag string) {
 ////////////////
 // Containers //
 ////////////////
-func createContainer(ctx context.Context, cc *types.ContainerConfig) string {
+func createDockerContainer(ctx context.Context, cc *types.ContainerConfig, cname string) string {
 
-	if !existImageLocally(ctx, cc.ImageTag) {
-		pullImage(ctx, cc.ImageTag)
+	// Check and format image tag
+	imgTag, err := utils.FormatImageTag(cc.ImageTag)
+	utils.CheckError(err, utils.WarningMode)
+
+	if !existImageLocally(ctx, imgTag) {
+		pullImage(ctx, imgTag)
 	}
 
+	ports := checkNodePorts(ctx, cc.Ports)
+
 	// Set configs
-	ctrConfig := &container.Config{Image: cc.ImageTag}
+	ctrConfig := &container.Config{Image: imgTag}
 	hostConfig := &container.HostConfig{
 		Binds:        cc.VolumeBinds,
-		PortBindings: cc.Ports,
+		PortBindings: ports,
 		Resources: container.Resources{
-			Memory:   int64(cc.MemLimit),
-			NanoCPUs: int64(cc.CPULimit),
+			Memory: int64(cc.MemLimit),
+			//NanoCPUs: int64(cc.CPULimit), // TODO
 		},
 	}
 	netConfig := &network.NetworkingConfig{}
 
-	resp, err := _dcli.ContainerCreate(ctx, ctrConfig, hostConfig, netConfig, nil, "")
+	resp, err := _dcli.ContainerCreate(ctx, ctrConfig, hostConfig, netConfig, nil, cname)
 	utils.CheckError(err, utils.WarningMode)
 
 	return resp.ID
 }
 
-func startContainer(ctx context.Context, cid string, ctype *types.ContainerType) {
+func startDockerContainer(ctx context.Context, ctrNameId string) { // ctrNameId = id or name
 
-	err := _dcli.ContainerStart(ctx, cid, dockertypes.ContainerStartOptions{})
+	err := _dcli.ContainerStart(ctx, ctrNameId, dockertypes.ContainerStartOptions{})
 	utils.CheckError(err, utils.WarningMode)
-
-	// Record container on distributed registry
-	cinfo := getContainerInfo(ctx, cid)
-	cinfo.ContainerType = *ctype
-	stime := getContainerStartTime(ctx, cid)
-	recordContainerOnReg(cinfo, stime, cid)
 }
 
-func stopContainer(ctx context.Context, cname string) {
+func restartDockerContainer(ctx context.Context, cname string) {
+
+	// Stop and start container
+	err := _dcli.ContainerRestart(ctx, cname, nil) // nil = do not wait to start container
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func stopDockerContainer(ctx context.Context, cname string) {
 
 	// SIGTERM instead of SIGKILL
 	err := _dcli.ContainerStop(ctx, cname, nil) // nil = engine default timeout
 	utils.CheckError(err, utils.WarningMode)
 }
 
-func removeContainer(ctx context.Context, cname string) {
-
-	// Remove container from distributed registry
-	rcid := getRegContainerId(cname)
-	ftime := getContainerFinishTime(ctx, cname)
-	removeContainerFromReg(rcid, ftime)
+func removeDockerContainer(ctx context.Context, cname string) {
 
 	err := _dcli.ContainerRemove(ctx, cname, dockertypes.ContainerRemoveOptions{})
 	utils.CheckError(err, utils.WarningMode)
 
-	// Remove unused volumes
-	pruneVolumes(ctx)
+	// TODO. Remove unused volumes
+	//pruneVolumes(ctx)
+}
+
+// all: only running containers (false) or all containers (true)
+func SearchDockerContainers(ctx context.Context, key, value string, all bool) *[]dockertypes.Container {
+
+	filter := filters.Args{}
+	if key != "" && value != "" {
+		filter = filters.NewArgs(filters.KeyValuePair{Key: key, Value: value})
+	}
+
+	ctr, err := _dcli.ContainerList(ctx, dockertypes.ContainerListOptions{Size: true, All: all, Filters: filter})
+	utils.CheckError(err, utils.WarningMode)
+
+	if len(ctr) > 0 {
+		return &ctr
+	} else {
+		return nil
+	}
 }
 
 /////////////
@@ -124,15 +146,15 @@ func pruneVolumes(ctx context.Context) {
 /////////////
 // Helpers //
 /////////////
-func SetContainerName(ctx context.Context, cid string, rcid uint64) (cname string) {
-
-	// Format container name
-	cname = cnameTemplate + strconv.FormatUint(rcid, 10)
+func SetContainerName(ctx context.Context, cid, cname string) {
 
 	err := _dcli.ContainerRename(ctx, cid, cname)
 	utils.CheckError(err, utils.WarningMode)
+}
 
-	return
+// Format cname from a rcid
+func GetContainerName(rcid uint64) string {
+	return cnameTemplate + strconv.FormatUint(rcid, 10)
 }
 
 // Extract the registry container ID (rcid) from a cname
@@ -160,15 +182,21 @@ func getContainerStartTime(ctx context.Context, cid string) uint64 {
 	return uint64(stime.Unix())
 }
 
-func getContainerFinishTime(ctx context.Context, cname string) uint64 {
+// Check if a port is already allocated by docker
+func isPortAllocatedByDocker(ctx context.Context, port string) bool {
 
-	// Get container
-	ctr, err := _dcli.ContainerInspect(ctx, cname)
-	utils.CheckError(err, utils.WarningMode)
+	ctrs := SearchDockerContainers(ctx, "", "", true)
+	if ctrs != nil {
+		for _, ctr := range *ctrs {
+			for _, p := range ctr.Ports {
+				strp := strconv.FormatUint(uint64(p.PublicPort), 10)
 
-	// Get finish unix time
-	ftime, err := time.Parse(time.RFC3339, ctr.State.FinishedAt)
-	utils.CheckError(err, utils.WarningMode)
+				if strp == port {
+					return true
+				}
+			}
+		}
+	}
 
-	return uint64(ftime.Unix())
+	return false
 }

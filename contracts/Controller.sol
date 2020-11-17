@@ -27,8 +27,8 @@ contract Controller {
     // Main flow events
     event NewEvent(uint64 eventId);
     event RequiredReplies(uint64 eventId);
-    event RequiredVotes(uint64 eventId, address solver);
-    event EventSolved(uint64 eventId, address sender);
+    event RequiredVotes(uint64 eventId, address solver); // Candidate
+    event EventSolved(uint64 eventId);
 
     // Container events
     event NewContainer(uint64 registryCtrId, string ctrId, address host);
@@ -82,7 +82,7 @@ contract Controller {
 
         // Create and link the first reply (event sender)
         Event.Reply memory reply;
-        reply.sender = msg.sender;
+        reply.replier = msg.sender;
         reply.nodeState = _nodeState;
         reply.createdAt = _createdAt;
         events[state.nextEventId].replies.push(reply);
@@ -130,7 +130,7 @@ contract Controller {
 
         // Create and link the reply to its event
         Event.Reply memory reply;
-        reply.sender = msg.sender;
+        reply.replier = msg.sender;
         reply.nodeState = _nodeState;
         reply.createdAt = _createdAt;
         events[eventId].replies.push(reply);
@@ -156,7 +156,7 @@ contract Controller {
         Event.Reply[] memory replies = events[eventId].replies;
 
         for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].sender == nodeAddr) return true;
+            if (replies[i].replier == nodeAddr) return true;
         }
 
         return false;
@@ -199,7 +199,7 @@ contract Controller {
         Event.Reply[] memory replies = events[eventId].replies;
 
         for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].sender == candidateAddr) {
+            if (replies[i].replier == candidateAddr) {
                 // Vote candidate (storage)
                 events[eventId].replies[i].voters.push(msg.sender);
 
@@ -253,7 +253,7 @@ contract Controller {
         events[eventId].solver = msg.sender;
         events[eventId].solvedAt = _solvedAt;
 
-        emit EventSolved(eventId, events[eventId].sender);
+        emit EventSolved(eventId);
 
         // Update the sender reputation
         updateReputation(msg.sender, "solveEvent");
@@ -273,7 +273,7 @@ contract Controller {
         uint64 votes;
 
         for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].sender == nodeAddr) {
+            if (replies[i].replier == nodeAddr) {
                 votes = uint64(replies[i].voters.length);
                 break;
             }

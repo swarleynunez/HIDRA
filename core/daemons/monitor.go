@@ -2,6 +2,7 @@ package daemons
 
 import (
 	"context"
+	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/utils"
 	"os"
 	"strconv"
@@ -27,6 +28,9 @@ func StartMonitor(ctx context.Context) {
 	go WatchNewContainer(ctx)
 	go WatchContainerRemoved()
 
+	// Recover host container state
+	managers.InitContainerState(ctx)
+
 	// Get and parse monitor time interval
 	mInter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
 	utils.CheckError(err, utils.WarningMode)
@@ -42,9 +46,28 @@ func StartMonitor(ctx context.Context) {
 	for {
 		time.Sleep(time.Duration(mInter) * time.Millisecond)
 
-		/////////////
-		// Testing //
-		/////////////
+		// Check all state rules
+		checkStateRules(ctx, cycles, mInter, cTime)
+	}
+
+	{
+		///////////////
+		// Testing 1 //
+		///////////////
+		/*cid := managers.NewContainer(ctx)
+		fmt.Println(cid)
+		cname := managers.SetContainerName(ctx, cid, 1)
+		time.Sleep(5 * time.Second)
+
+		state := managers.GetContainerState(ctx, cname)
+		fmt.Println("STATE:", *state)
+
+		time.Sleep(1 * time.Second)
+		managers.DeleteContainer(ctx, cname)*/
+
+		///////////////
+		// Testing 2 //
+		///////////////
 		/*_ = managers.NewContainer(ctx)
 		time.Sleep(5 * time.Second)
 
@@ -58,22 +81,5 @@ func StartMonitor(ctx context.Context) {
 		c = managers.GetRegContainer(19)
 		fmt.Println(*c)
 		break*/
-
-		// Check all state rules
-		checkStateRules(ctx, cycles, mInter, cTime)
 	}
-
-	/////////////
-	// Testing //
-	/////////////
-	/*cid := managers.NewContainer(ctx)
-	fmt.Println(cid)
-	cname := managers.SetContainerName(ctx, cid, 1)
-	time.Sleep(5 * time.Second)
-
-	state := managers.GetContainerState(ctx, cname)
-	fmt.Println("STATE:", *state)
-
-	time.Sleep(1 * time.Second)
-	managers.DeleteContainer(ctx, cname)*/
 }

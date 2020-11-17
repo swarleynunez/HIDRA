@@ -7,41 +7,43 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/bindings"
 	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/policies"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/superfog/inputs"
+	"time"
 )
 
 const (
-	yellowFormat = "\033[1;33m[+] %s (Bound: %v, Now: %v)\033[0m\n"
+	yellowWarnFormat = "\033[1;33m[%s] %s (Bound: %v, Now: %v)\033[0m\n"
 )
 
 var (
 	errUnknownSpec         = errors.New("unknown specification")
 	errBoundNotImplemented = errors.New("spec bound type not implemented")
 	errUnknownAction       = errors.New("unknown rule action")
+	errNoContainersFound   = errors.New("no containers found")
 )
 
 func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 
 	state := managers.GetNodeState()
 
-	for _, r := range policies.Rules {
+	for _, v := range inputs.Rules {
 
 		// Current spec value (variable for different value types)
 		var now interface{}
 
-		switch r.Spec {
+		switch v.Spec {
 		case types.CpuSpec:
-			now = selectCpuMetric(r.MetricType, state)
+			now = selectCpuMetric(v.MetricType, state)
 		case types.MemSpec:
-			now = selectMemMetric(r.MetricType, state)
+			now = selectMemMetric(v.MetricType, state)
 		case types.DiskSpec:
-			now = selectDiskMetric(r.MetricType, state)
+			now = selectDiskMetric(v.MetricType, state)
 		case types.PktSentSpec:
-			now = selectPktSentMetric(r.MetricType, state)
+			now = selectPktSentMetric(v.MetricType, state)
 		case types.PktRecvSpec:
-			now = selectPktRecvMetric(r.MetricType, state)
+			now = selectPktRecvMetric(v.MetricType, state)
 		default:
 			utils.CheckError(errUnknownSpec, utils.WarningMode)
 			continue // Drop rule check
@@ -53,7 +55,7 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 		}
 
 		// Get rule cycle counter (rcc)
-		cc := cycles[r.NameId]
+		cc := cycles[v.NameId]
 
 		// Count a measure if the rcc has already started
 		if cc.measures > 0 {
@@ -61,7 +63,7 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 		}
 
 		// Rule checking
-		if ok, err := utils.CompareValues(now, r.Comparator, r.Bound); ok {
+		if ok, err := utils.CompareValues(now, v.Comparator, v.Bound); ok {
 
 			// Start a rcc
 			if cc.measures == 0 {
@@ -73,7 +75,7 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 
 			// TODO. Rcc checking
 			if cc.measures == cTime/mInter && cc.measures == cc.triggers {
-				runRuleAction(ctx, &r, state, now)
+				runRuleAction(ctx, &v, state, now)
 			}
 		} else {
 			utils.CheckError(err, utils.WarningMode)
@@ -85,7 +87,7 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 		}
 
 		// Update rcc for the next state
-		cycles[r.NameId] = cc
+		cycles[v.NameId] = cc
 	}
 }
 
@@ -93,22 +95,30 @@ func runRuleAction(ctx context.Context, rule *types.Rule, state *types.State, no
 
 	switch rule.Action {
 	case types.SendEventAction:
-		etype := types.EventType{
-			Spec: rule.Spec,
-			Task: types.MigrateTask,
-			Metadata: map[string]interface{}{
-				"docker_image": "nginx",
-			},
+		// TODO
+		rcid, err := selectWorseContainer(ctx)
+		if err == nil {
+			etype := types.EventType{
+				Spec: rule.Spec,
+				Task: types.MigrateContainerTask, // TODO
+				Metadata: map[string]interface{}{
+					"rcid": rcid,
+				},
+			}
+			managers.SendEvent(&etype, state)
 		}
-		managers.SendEvent(&etype, state)
+
+		fallthrough
 	case types.ProceedAction:
-		managers.RunTask(ctx, types.CreateTask)
+		if rule.Action == types.ProceedAction { // Due to the fallthrough
+			//managers.RunTask(ctx, types.CreateTask)	// TODO
+		}
 		fallthrough
 	case types.LogAction:
 		// Save log into a file, send log to a remote server...
 		fallthrough
 	case types.WarnAction:
-		fmt.Printf(yellowFormat, rule.Msg, rule.Bound, now)
+		fmt.Printf(yellowWarnFormat, time.Now().Format("15:04:05.000000"), rule.Msg, rule.Bound, now)
 	case types.IgnoreAction:
 		// Do nothing
 	default:
@@ -182,6 +192,35 @@ func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Addre
 	}
 
 	return
+}
+
+// TODO. Select the worse container according to its config and spec usage
+func selectWorseContainer(ctx context.Context) (uint64, error) {
+
+	// Get distributed registry active containers
+	ctrs := managers.GetContainerReg()
+	for key := range ctrs {
+		// Node account
+		from := managers.GetFromAccount()
+
+		// Am I the host?
+		if ctrs[key].Host == from.Address {
+			// Is the container running?
+			ctr := managers.SearchDockerContainers(ctx, "name", managers.GetContainerName(key), false)
+			if ctr != nil {
+				// Decode container info
+				var cinfo types.ContainerInfo
+				utils.UnmarshalJSON(ctrs[key].Info, &cinfo)
+
+				// TODO
+				//if cinfo.MainSpec == spec {
+				return key, nil
+				//}
+			}
+		}
+	}
+
+	return 0, errNoContainersFound
 }
 
 // Functions to select the spec metric type depending on the rule bound type

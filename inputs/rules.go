@@ -1,4 +1,4 @@
-package policies
+package inputs
 
 import "github.com/swarleynunez/superfog/core/types"
 
@@ -12,13 +12,13 @@ var Rules = [...]types.Rule{
 		Action:     types.SendEventAction,
 		Msg:        "CPU usage % exceeded",
 	},
-	{
+	/*{
 		NameId:     "rule_2",
 		Spec:       types.MemSpec,
 		MetricType: types.PercentMetric,
 		Comparator: types.GreaterComp,
-		Bound:      float64(72),
-		Action:     types.WarnAction,
+		Bound:      float64(75),
+		Action:     types.SendEventAction,
 		Msg:        "RAM usage % exceeded",
 	},
 	{
@@ -26,8 +26,8 @@ var Rules = [...]types.Rule{
 		Spec:       types.DiskSpec,
 		MetricType: types.PercentMetric,
 		Comparator: types.GreaterComp,
-		Bound:      float64(65),
-		Action:     types.WarnAction,
+		Bound:      float64(70),
+		Action:     types.SendEventAction,
 		Msg:        "Disk space usage % exceeded",
-	},
+	},*/
 }
