@@ -57,26 +57,26 @@ func pullImage(ctx context.Context, imgTag string) {
 ////////////////
 // Containers //
 ////////////////
-func createDockerContainer(ctx context.Context, cc *types.ContainerConfig, cname string) string {
+func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) string {
 
 	// Check and format image tag
-	imgTag, err := utils.FormatImageTag(cc.ImageTag)
+	imgTag, err := utils.FormatImageTag(cinfo.ImageTag)
 	utils.CheckError(err, utils.WarningMode)
 
 	if !existImageLocally(ctx, imgTag) {
 		pullImage(ctx, imgTag)
 	}
 
-	ports := checkNodePorts(ctx, cc.Ports)
+	ports := checkNodePorts(ctx, cinfo.Ports)
 
 	// Set configs
 	ctrConfig := &container.Config{Image: imgTag}
 	hostConfig := &container.HostConfig{
-		Binds:        cc.VolumeBinds,
+		Binds:        cinfo.Volumes,
 		PortBindings: ports,
 		Resources: container.Resources{
-			Memory: int64(cc.MemLimit),
-			//NanoCPUs: int64(cc.CPULimit), // TODO
+			Memory:   int64(cinfo.MemLimit),
+			NanoCPUs: int64(cinfo.CPULimit),
 		},
 	}
 	netConfig := &network.NetworkingConfig{}
@@ -109,7 +109,8 @@ func stopDockerContainer(ctx context.Context, cname string) {
 
 func removeDockerContainer(ctx context.Context, cname string) {
 
-	err := _dcli.ContainerRemove(ctx, cname, dockertypes.ContainerRemoveOptions{})
+	// TODO. Forcing the container remove
+	err := _dcli.ContainerRemove(ctx, cname, dockertypes.ContainerRemoveOptions{Force: true})
 	utils.CheckError(err, utils.WarningMode)
 
 	// TODO. Remove unused volumes

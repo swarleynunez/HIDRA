@@ -18,9 +18,23 @@ type cycleCounter struct {
 // Hysteresis cycles by rule name
 type cycles map[string]cycleCounter
 
-func StartMonitor(ctx context.Context) {
+func Run(ctx context.Context) {
 
-	// Goroutines to receive events
+	// Node rule cycles
+	cycles := cycles{}
+
+	// Get and parse monitor time interval
+	mInter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
+	utils.CheckError(err, utils.FatalMode)
+
+	// Get and parse cycle time
+	cTime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
+	utils.CheckError(err, utils.FatalMode)
+
+	// Cache to avoid sending duplicate events
+	ecache := map[uint64]bool{}
+
+	// Watchers to receive events
 	go WatchNewEvent()
 	go WatchRequiredReplies()
 	go WatchRequiredVotes(ctx)
@@ -28,58 +42,14 @@ func StartMonitor(ctx context.Context) {
 	go WatchNewContainer(ctx)
 	go WatchContainerRemoved()
 
-	// Recover host container state
+	// Recover host container state from distributed registry
 	managers.InitContainerState(ctx)
 
-	// Get and parse monitor time interval
-	mInter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
-	utils.CheckError(err, utils.WarningMode)
-
-	// Get and parse cycle time
-	cTime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
-	utils.CheckError(err, utils.WarningMode)
-
-	// Node rule cycles
-	cycles := cycles{}
-
-	// Main infinite loop
+	// Main loop
 	for {
 		time.Sleep(time.Duration(mInter) * time.Millisecond)
 
 		// Check all state rules
-		checkStateRules(ctx, cycles, mInter, cTime)
-	}
-
-	{
-		///////////////
-		// Testing 1 //
-		///////////////
-		/*cid := managers.NewContainer(ctx)
-		fmt.Println(cid)
-		cname := managers.SetContainerName(ctx, cid, 1)
-		time.Sleep(5 * time.Second)
-
-		state := managers.GetContainerState(ctx, cname)
-		fmt.Println("STATE:", *state)
-
-		time.Sleep(1 * time.Second)
-		managers.DeleteContainer(ctx, cname)*/
-
-		///////////////
-		// Testing 2 //
-		///////////////
-		/*_ = managers.NewContainer(ctx)
-		time.Sleep(5 * time.Second)
-
-		fmt.Println(managers.GetRegActiveContainers())
-		c := managers.GetRegContainer(19)
-		fmt.Println(*c)
-
-		managers.DeleteContainer(ctx, "registry_ctr_19")
-
-		fmt.Println(managers.GetRegActiveContainers())
-		c = managers.GetRegContainer(19)
-		fmt.Println(*c)
-		break*/
+		checkStateRules(ctx, cycles, mInter, cTime, ecache)
 	}
 }

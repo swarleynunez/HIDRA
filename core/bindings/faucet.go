@@ -20,7 +20,6 @@ var (
 	_ = big.NewInt
 	_ = strings.NewReader
 	_ = ethereum.NotFound
-	_ = abi.U256
 	_ = bind.Bind
 	_ = common.Big1
 	_ = types.BloomLookup
@@ -138,7 +137,7 @@ func bindFaucet(address common.Address, caller bind.ContractCaller, transactor b
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_Faucet *FaucetRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
+func (_Faucet *FaucetRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 	return _Faucet.Contract.FaucetCaller.contract.Call(opts, result, method, params...)
 }
 
@@ -157,7 +156,7 @@ func (_Faucet *FaucetRaw) Transact(opts *bind.TransactOpts, method string, param
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_Faucet *FaucetCallerRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
+func (_Faucet *FaucetCallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 	return _Faucet.Contract.contract.Call(opts, result, method, params...)
 }
 
@@ -174,52 +173,62 @@ func (_Faucet *FaucetTransactorRaw) Transact(opts *bind.TransactOpts, method str
 
 // GetActionLimit is a free data retrieval call binding the contract method 0x31c1cda7.
 //
-// Solidity: function getActionLimit(string action) constant returns(int64)
+// Solidity: function getActionLimit(string action) view returns(int64)
 func (_Faucet *FaucetCaller) GetActionLimit(opts *bind.CallOpts, action string) (int64, error) {
-	var (
-		ret0 = new(int64)
-	)
-	out := ret0
-	err := _Faucet.contract.Call(opts, out, "getActionLimit", action)
-	return *ret0, err
+	var out []interface{}
+	err := _Faucet.contract.Call(opts, &out, "getActionLimit", action)
+
+	if err != nil {
+		return *new(int64), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(int64)).(*int64)
+
+	return out0, err
+
 }
 
 // GetActionLimit is a free data retrieval call binding the contract method 0x31c1cda7.
 //
-// Solidity: function getActionLimit(string action) constant returns(int64)
+// Solidity: function getActionLimit(string action) view returns(int64)
 func (_Faucet *FaucetSession) GetActionLimit(action string) (int64, error) {
 	return _Faucet.Contract.GetActionLimit(&_Faucet.CallOpts, action)
 }
 
 // GetActionLimit is a free data retrieval call binding the contract method 0x31c1cda7.
 //
-// Solidity: function getActionLimit(string action) constant returns(int64)
+// Solidity: function getActionLimit(string action) view returns(int64)
 func (_Faucet *FaucetCallerSession) GetActionLimit(action string) (int64, error) {
 	return _Faucet.Contract.GetActionLimit(&_Faucet.CallOpts, action)
 }
 
 // GetActionVariation is a free data retrieval call binding the contract method 0x6e4920e5.
 //
-// Solidity: function getActionVariation(string action) constant returns(int64)
+// Solidity: function getActionVariation(string action) view returns(int64)
 func (_Faucet *FaucetCaller) GetActionVariation(opts *bind.CallOpts, action string) (int64, error) {
-	var (
-		ret0 = new(int64)
-	)
-	out := ret0
-	err := _Faucet.contract.Call(opts, out, "getActionVariation", action)
-	return *ret0, err
+	var out []interface{}
+	err := _Faucet.contract.Call(opts, &out, "getActionVariation", action)
+
+	if err != nil {
+		return *new(int64), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(int64)).(*int64)
+
+	return out0, err
+
 }
 
 // GetActionVariation is a free data retrieval call binding the contract method 0x6e4920e5.
 //
-// Solidity: function getActionVariation(string action) constant returns(int64)
+// Solidity: function getActionVariation(string action) view returns(int64)
 func (_Faucet *FaucetSession) GetActionVariation(action string) (int64, error) {
 	return _Faucet.Contract.GetActionVariation(&_Faucet.CallOpts, action)
 }
 
 // GetActionVariation is a free data retrieval call binding the contract method 0x6e4920e5.
 //
-// Solidity: function getActionVariation(string action) constant returns(int64)
+// Solidity: function getActionVariation(string action) view returns(int64)
 func (_Faucet *FaucetCallerSession) GetActionVariation(action string) (int64, error) {
 	return _Faucet.Contract.GetActionVariation(&_Faucet.CallOpts, action)
 }

@@ -8,7 +8,7 @@ import (
 func Connect(url string) (ethc *ethclient.Client) {
 
 	ethc, err := ethclient.Dial(url)
-	utils.CheckError(err, utils.WarningMode)
+	utils.CheckError(err, utils.FatalMode)
 
 	return
 }

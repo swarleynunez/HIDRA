@@ -20,7 +20,6 @@ var (
 	_ = big.NewInt
 	_ = strings.NewReader
 	_ = ethereum.NotFound
-	_ = abi.U256
 	_ = bind.Bind
 	_ = common.Big1
 	_ = types.BloomLookup
@@ -138,7 +137,7 @@ func bindNode(address common.Address, caller bind.ContractCaller, transactor bin
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_Node *NodeRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
+func (_Node *NodeRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 	return _Node.Contract.NodeCaller.contract.Call(opts, result, method, params...)
 }
 
@@ -157,7 +156,7 @@ func (_Node *NodeRaw) Transact(opts *bind.TransactOpts, method string, params ..
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_Node *NodeCallerRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
+func (_Node *NodeCallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 	return _Node.Contract.contract.Call(opts, result, method, params...)
 }
 
@@ -174,52 +173,62 @@ func (_Node *NodeTransactorRaw) Transact(opts *bind.TransactOpts, method string,
 
 // GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
 //
-// Solidity: function getReputation() constant returns(int64)
+// Solidity: function getReputation() view returns(int64)
 func (_Node *NodeCaller) GetReputation(opts *bind.CallOpts) (int64, error) {
-	var (
-		ret0 = new(int64)
-	)
-	out := ret0
-	err := _Node.contract.Call(opts, out, "getReputation")
-	return *ret0, err
+	var out []interface{}
+	err := _Node.contract.Call(opts, &out, "getReputation")
+
+	if err != nil {
+		return *new(int64), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(int64)).(*int64)
+
+	return out0, err
+
 }
 
 // GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
 //
-// Solidity: function getReputation() constant returns(int64)
+// Solidity: function getReputation() view returns(int64)
 func (_Node *NodeSession) GetReputation() (int64, error) {
 	return _Node.Contract.GetReputation(&_Node.CallOpts)
 }
 
 // GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
 //
-// Solidity: function getReputation() constant returns(int64)
+// Solidity: function getReputation() view returns(int64)
 func (_Node *NodeCallerSession) GetReputation() (int64, error) {
 	return _Node.Contract.GetReputation(&_Node.CallOpts)
 }
 
 // NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
 //
-// Solidity: function nodeSpecs() constant returns(string)
+// Solidity: function nodeSpecs() view returns(string)
 func (_Node *NodeCaller) NodeSpecs(opts *bind.CallOpts) (string, error) {
-	var (
-		ret0 = new(string)
-	)
-	out := ret0
-	err := _Node.contract.Call(opts, out, "nodeSpecs")
-	return *ret0, err
+	var out []interface{}
+	err := _Node.contract.Call(opts, &out, "nodeSpecs")
+
+	if err != nil {
+		return *new(string), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(string)).(*string)
+
+	return out0, err
+
 }
 
 // NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
 //
-// Solidity: function nodeSpecs() constant returns(string)
+// Solidity: function nodeSpecs() view returns(string)
 func (_Node *NodeSession) NodeSpecs() (string, error) {
 	return _Node.Contract.NodeSpecs(&_Node.CallOpts)
 }
 
 // NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
 //
-// Solidity: function nodeSpecs() constant returns(string)
+// Solidity: function nodeSpecs() view returns(string)
 func (_Node *NodeCallerSession) NodeSpecs() (string, error) {
 	return _Node.Contract.NodeSpecs(&_Node.CallOpts)
 }

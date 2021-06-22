@@ -1,6 +1,7 @@
 package managers
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/bindings"
 	"github.com/swarleynunez/superfog/core/eth"
@@ -21,25 +22,13 @@ func controllerInstance() (cinst *bindings.Controller) {
 	if utils.ValidEthAddress(caddr) {
 		// Get instance
 		inst, err := bindings.NewController(common.HexToAddress(caddr), _ethc)
-		utils.CheckError(err, utils.WarningMode)
+		utils.CheckError(err, utils.FatalMode)
 		cinst = inst
+
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", caddr, "\n")
 	} else {
-		//utils.CheckError(eth.ErrMalformedAddr, utils.PanicMode)
-
-		// TODO
-		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, DeployControllerGasLimit)
-		_nonce++ // Next nonce to the next transaction
-
-		// Create smart contract
-		caddr, _, inst, err := bindings.DeployController(auth, _ethc)
-		utils.CheckError(err, utils.WarningMode)
-		cinst = inst
-
-		if err == nil {
-			// Save the controller address
-			utils.SetEnvKey("CONTROLLER_ADDR", caddr.String())
-		}
+		utils.CheckError(eth.ErrMalformedAddr, utils.FatalMode)
 	}
 
 	return
@@ -48,7 +37,7 @@ func controllerInstance() (cinst *bindings.Controller) {
 func faucetInstance(faddr common.Address) (finst *bindings.Faucet) {
 
 	finst, err := bindings.NewFaucet(faddr, _ethc)
-	utils.CheckError(err, utils.WarningMode)
+	utils.CheckError(err, utils.FatalMode)
 
 	return
 }
@@ -61,6 +50,52 @@ func nodeInstance(naddr common.Address) (ninst *bindings.Node) {
 	return
 }
 
+/////////////
+// Setters //
+/////////////
+func DeployController() {
+
+	// Create and configure a transactor
+	_nmutex.Lock()
+	auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, DeployControllerGasLimit)
+	_nonce++ // Next nonce for the next transaction
+	_nmutex.Unlock()
+
+	// Create smart contract
+	caddr, _, _, err := bindings.DeployController(auth, _ethc)
+	utils.CheckError(err, utils.FatalMode)
+
+	// Save the controller address
+	utils.SetEnvKey("CONTROLLER_ADDR", caddr.String())
+
+	// Debug
+	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Controller address: ", caddr.String(), "\n")
+}
+
+func RegisterNode() {
+
+	if !IsNodeRegistered(_from.Address) {
+
+		specs := GetNodeSpecs()
+
+		// Create and configure a transactor
+		_nmutex.Lock()
+		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RegisterNodeGasLimit)
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
+
+		// Send transaction
+		_, err := _cinst.RegisterNode(auth, utils.MarshalJSON(specs))
+		utils.CheckError(err, utils.FatalMode)
+
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node registered\n")
+	} else {
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node is already registered\n")
+	}
+}
+
 ////////////////
 // Reputables //
 ////////////////
@@ -69,11 +104,13 @@ func SendEvent(etype *types.EventType, state *types.State) {
 	// Reputation limit for this function
 	limit := getActionLimit(SendEventAction)
 
-	if isNodeRegistered(_from.Address) && hasNodeReputation(limit) {
+	if hasNodeReputation(limit) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendEventGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		createdAt := uint64(time.Now().Unix())
@@ -87,15 +124,16 @@ func SendReply(eid uint64, state *types.State) {
 	// Reputation limit for this function
 	limit := getActionLimit(SendReplyAction)
 
-	if isNodeRegistered(_from.Address) &&
-		hasNodeReputation(limit) &&
+	if hasNodeReputation(limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
 		!hasAlreadyReplied(eid, _from.Address) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendReplyGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		createdAt := uint64(time.Now().Unix())
@@ -109,16 +147,17 @@ func VoteSolver(eid uint64, addr common.Address) {
 	// Reputation limit for this function
 	limit := getActionLimit(VoteSolverAction)
 
-	if isNodeRegistered(_from.Address) &&
-		hasNodeReputation(limit) &&
+	if hasNodeReputation(limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
 		hasAlreadyReplied(eid, addr) &&
 		!hasAlreadyVoted(eid) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, VoteSolverGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		_, err := _cinst.VoteSolver(auth, eid, addr)
@@ -131,15 +170,16 @@ func SolveEvent(eid uint64) {
 	// Reputation limit for this function
 	limit := getActionLimit(SolveEventAction)
 
-	if isNodeRegistered(_from.Address) &&
-		hasNodeReputation(limit) &&
+	if hasNodeReputation(limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
 		canSolveEvent(eid) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SolveEventGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		solvedAt := uint64(time.Now().Unix())
@@ -154,11 +194,13 @@ func recordContainerOnReg(cinfo *types.ContainerInfo, startedAt uint64, cid stri
 	// Reputation limit for this function
 	limit := getActionLimit(RecordContainerAction)
 
-	if isNodeRegistered(_from.Address) && hasNodeReputation(limit) {
+	if hasNodeReputation(limit) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RecordContainerGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		_, err := _cinst.RecordContainer(auth, utils.MarshalJSON(cinfo), startedAt, cid)
@@ -172,37 +214,19 @@ func removeContainerFromReg(rcid uint64, finishedAt uint64) {
 	// Reputation limit for this function
 	limit := getActionLimit(RemoveContainerAction)
 
-	if isNodeRegistered(_from.Address) &&
-		hasNodeReputation(limit) &&
+	if hasNodeReputation(limit) &&
 		existRegContainer(rcid) &&
 		isRegContainerHost(rcid) &&
 		isRegContainerActive(rcid) {
 
 		// Create and configure a transactor
+		_nmutex.Lock()
 		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RemoveContainerGasLimit)
-		_nonce++ // Next nonce to the next transaction
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
 
 		// Send transaction
 		_, err := _cinst.RemoveContainer(auth, rcid, finishedAt)
-		utils.CheckError(err, utils.WarningMode)
-	}
-}
-
-/////////////
-// Setters //
-/////////////
-func registerNode() {
-
-	if !isNodeRegistered(_from.Address) {
-
-		specs := GetNodeSpecs()
-
-		// Create and configure a transactor
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RegisterNodeGasLimit)
-		_nonce++ // Next nonce to the next transaction
-
-		// Send transaction
-		_, err := _cinst.RegisterNode(auth, utils.MarshalJSON(specs))
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
@@ -213,7 +237,7 @@ func registerNode() {
 func getFaucetAddress() (faddr common.Address) {
 
 	faddr, err := _cinst.Faucet(nil)
-	utils.CheckError(err, utils.WarningMode)
+	utils.CheckError(err, utils.FatalMode)
 
 	return
 }
@@ -297,7 +321,7 @@ func GetContainerReg() map[uint64]*types.Container {
 /////////////
 // Helpers //
 /////////////
-func isNodeRegistered(addr common.Address) (r bool) {
+func IsNodeRegistered(addr common.Address) (r bool) {
 
 	r, err := _cinst.IsNodeRegistered(nil, addr)
 	utils.CheckError(err, utils.WarningMode)

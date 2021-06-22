@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	yellowWarnFormat = "\033[1;33m[%s] %s (Bound: %v, Now: %v)\033[0m\n"
+	yellowWarnFormat = "\033[1;33m[%s] %s (Limit: %v, Now: %v)\033[0m\n"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 	errNoContainersFound   = errors.New("no containers found")
 )
 
-func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
+func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64, ecache map[uint64]bool) {
 
 	state := managers.GetNodeState()
 
@@ -75,7 +75,7 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 
 			// TODO. Rcc checking
 			if cc.measures == cTime/mInter && cc.measures == cc.triggers {
-				runRuleAction(ctx, &v, state, now)
+				runRuleAction(ctx, &v, ecache, state, now)
 			}
 		} else {
 			utils.CheckError(err, utils.WarningMode)
@@ -91,23 +91,32 @@ func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64) {
 	}
 }
 
-func runRuleAction(ctx context.Context, rule *types.Rule, state *types.State, now interface{}) {
+func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool, state *types.State, now interface{}) {
 
 	switch rule.Action {
 	case types.SendEventAction:
+
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventInit\n")
+
 		// TODO
 		rcid, err := selectWorseContainer(ctx)
 		if err == nil {
-			etype := types.EventType{
-				Spec: rule.Spec,
-				Task: types.MigrateContainerTask, // TODO
-				Metadata: map[string]interface{}{
-					"rcid": rcid,
-				},
-			}
-			managers.SendEvent(&etype, state)
-		}
 
+			// TODO. Check if an event has already been sent for selected container
+			if !ecache[rcid] {
+				ecache[rcid] = true
+
+				etype := types.EventType{
+					Spec: rule.Spec,
+					Task: types.MigrateContainerTask, // TODO
+					Metadata: map[string]interface{}{
+						"rcid": rcid,
+					},
+				}
+				go managers.SendEvent(&etype, state)
+			}
+		}
 		fallthrough
 	case types.ProceedAction:
 		if rule.Action == types.ProceedAction { // Due to the fallthrough
@@ -146,8 +155,11 @@ func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Addre
 
 	for _, v := range replies {
 
+		// Debug
+		//fmt.Println(v.Replier.String(), "-->", v.NodeState)
+
 		// Get replier specs
-		ns := managers.GetSpecs(v.Sender)
+		ns := managers.GetSpecs(v.Replier)
 
 		// Decode reply node state
 		var state types.State
@@ -180,14 +192,29 @@ func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Addre
 
 		// Set the best till now
 		if best == nil {
-			best, addr = met, v.Sender
+			best, addr = met, v.Replier
 			continue
 		}
 
 		if ok, err := utils.CompareValues(met, comp, best); ok {
-			best, addr = met, v.Sender
+			best, addr = met, v.Replier
 		} else {
 			utils.CheckError(err, utils.WarningMode)
+		}
+	}
+
+	// Debug: TODO
+	addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
+	addr2 := common.HexToAddress("0xb066c34E2C26E6E03042Ae4AA11Dfb9A28cd7C52")
+	addr3 := common.HexToAddress("0xa852f9A4f20651e4D6645d5200B5CAef06AFf4fB")
+
+	if event.Sender == addr {
+		if addr == addr1 {
+			addr = addr2
+		} else if addr == addr2 {
+			addr = addr3
+		} else if addr == addr3 {
+			addr = addr1
 		}
 	}
 
@@ -203,7 +230,7 @@ func selectWorseContainer(ctx context.Context) (uint64, error) {
 		// Node account
 		from := managers.GetFromAccount()
 
-		// Am I the host?
+		// TODO: Am I the host?
 		if ctrs[key].Host == from.Address {
 			// Is the container running?
 			ctr := managers.SearchDockerContainers(ctx, "name", managers.GetContainerName(key), false)

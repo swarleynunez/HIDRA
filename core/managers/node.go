@@ -17,26 +17,30 @@ import (
 	"github.com/shirou/gopsutil/mem"
 	psutilnet "github.com/shirou/gopsutil/net"
 	"github.com/swarleynunez/superfog/core/bindings"
+	"github.com/swarleynunez/superfog/core/docker"
+	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
 	"github.com/swarleynunez/superfog/inputs"
 	"math"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
 const (
 	// Gas limit of each smart contract function
-	DeployControllerGasLimit uint64 = 3400000
+	DeployControllerGasLimit uint64 = 3600000
 	RegisterNodeGasLimit     uint64 = 530000
 	SendEventGasLimit        uint64 = 340000
 	SendReplyGasLimit        uint64 = 230000
 	VoteSolverGasLimit       uint64 = 180000
 	SolveEventGasLimit       uint64 = 110000
 	RecordContainerGasLimit  uint64 = 370000
-	RemoveContainerGasLimit  uint64 = 100000
+	RemoveContainerGasLimit  uint64 = 150000
 
 	// Reputable actions
 	SendEventAction       = "sendEvent"
@@ -52,13 +56,15 @@ const (
 
 var (
 	// Unexported and "readonly" global parameters
-	_ethc  *ethclient.Client  // Ethereum client
-	_dcli  *client.Client     // Docker client
-	_ks    *keystore.KeyStore // Ethereum keystore
-	_from  accounts.Account   // Selected Ethereum account
-	_nonce uint64             // Selected account nonce
-	_cinst *bindings.Controller
-	_finst *bindings.Faucet
+	_ethc   *ethclient.Client
+	_dcli   *client.Client
+	_ks     *keystore.KeyStore
+	_from   accounts.Account
+	_nonce  uint64
+	_nmutex *sync.Mutex
+	_pmutex *sync.Mutex
+	_cinst  *bindings.Controller
+	_finst  *bindings.Faucet
 
 	// Errors
 	errUnknownTask = errors.New("unknown task")
@@ -69,41 +75,56 @@ type networks map[string]dockertypes.NetworkStats
 //////////
 // Init //
 //////////
-func InitNode(ethc *ethclient.Client, dcli *client.Client, ks *keystore.KeyStore, from accounts.Account) {
+func InitNode(ctx context.Context, deploying bool) {
 
-	_ethc = ethc
-	_dcli = dcli
-	_ks = ks
-	_from = from
+	// Load .env configuration
+	utils.LoadEnv()
 
-	// Get loaded account nonce
-	nonce, err := ethc.PendingNonceAt(context.Background(), from.Address)
-	utils.CheckError(err, utils.WarningMode)
+	var (
+		nodeDir = os.Getenv("ETH_NODE_DIR")
+		addr    = os.Getenv("NODE_ADDR")
+		pass    = os.Getenv("NODE_PASS")
+	)
+
+	// Connect to the Ethereum node
+	_ethc = eth.Connect(utils.FormatPath(nodeDir, "geth.ipc"))
+
+	// Connect to the Docker node
+	_dcli = docker.Connect(ctx)
+
+	// Load Ethereum keystore
+	keypath := utils.FormatPath(nodeDir, "keystore")
+	_ks = eth.LoadKeystore(keypath)
+
+	// Load and unlock an Ethereum account
+	_from = eth.LoadAccount(_ks, addr, pass)
+
+	// Get loaded Ethereum account nonce
+	nonce, err := _ethc.PendingNonceAt(context.Background(), _from.Address)
+	utils.CheckError(err, utils.FatalMode)
 	_nonce = nonce
 
-	// Debug
-	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: NodeAddress="+from.Address.String(), "\n")
+	_nmutex = &sync.Mutex{} // Mutex to synchronize access to account nonce
+	_pmutex = &sync.Mutex{} // Mutex to synchronize access to network ports
 
-	// Deploy controller smart contract or get an instance
-	_cinst = controllerInstance()
-
-	// Faucet instance
-	_finst = faucetInstance(getFaucetAddress())
-
-	// Register node in the network
-	registerNode()
+	// Get smart contracts instances
+	if !deploying {
+		_cinst = controllerInstance()
+		_finst = faucetInstance(getFaucetAddress())
+	}
 }
 
 func InitContainerState(ctx context.Context) {
 
 	// TODO. Testing
 	rand.Seed(time.Now().Unix())
-	csetup := inputs.Containers[rand.Intn(len(inputs.Containers))]
-	NewContainer(ctx, &csetup)
+	cinfo := inputs.Containers[rand.Intn(len(inputs.Containers))]
+	NewContainer(ctx, &cinfo)
 
-	UpdateContainerState(ctx)
+	//UpdateContainerState(ctx)
 }
 
+// TODO
 func UpdateContainerState(ctx context.Context) {
 
 	// Get distributed registry active containers
@@ -125,7 +146,7 @@ func UpdateContainerState(ctx context.Context) {
 				ctr := SearchDockerContainers(ctx, "id", cinfo.Id, true)
 				if ctr == nil {
 					RemoveContainer(cname)
-					NewContainer(ctx, &cinfo.ContainerSetup)
+					NewContainer(ctx, &cinfo)
 					newRegCtr = true
 				} else {
 					SetContainerName(ctx, cinfo.Id, cname)
@@ -267,20 +288,19 @@ func getContainerInfo(ctx context.Context, ctrNameId string) *types.ContainerInf
 	utils.CheckError(err, utils.WarningMode)
 
 	return &types.ContainerInfo{
-		Id: ctr.ID,
-		ContainerSetup: types.ContainerSetup{
-			ContainerConfig: types.ContainerConfig{
-				ImageTag: ctr.Config.Image,
-				//CPULimit:    uint64(ctr.HostConfig.NanoCPUs),
-				MemLimit:    uint64(ctr.HostConfig.Memory),
-				VolumeBinds: ctr.HostConfig.Binds,
-				Ports:       ctr.HostConfig.PortBindings,
-			},
-		},
-		IPAddress: ctr.NetworkSettings.IPAddress, // TODO
+		Id:        ctr.ID,
+		ImageTag:  ctr.Config.Image,
 		ImageArch: img.Architecture,
 		ImageOs:   img.Os,
 		ImageSize: uint64(img.VirtualSize),
+		ContainerSetup: types.ContainerSetup{
+			ContainerConfig: types.ContainerConfig{
+				CPULimit: uint64(ctr.HostConfig.NanoCPUs),
+				MemLimit: uint64(ctr.HostConfig.Memory),
+				Volumes:  ctr.HostConfig.Binds,
+				Ports:    ctr.HostConfig.PortBindings,
+			},
+		},
 	}
 }
 
@@ -314,9 +334,9 @@ func getContainerState(ctx context.Context, cname string) *types.State {
 //////////////
 // Handling //
 //////////////
-func RunTask(ctx context.Context, task types.Task, cname string) {
+/*func RunTask(ctx context.Context, task types.Task, cname string) {
 
-	fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Running task (RCID="+strconv.FormatUint(getRegContainerId(cname), 10)+")")
+	fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Running local task (RCID="+strconv.FormatUint(getRegContainerId(cname), 10)+")")
 
 	switch task {
 	case types.NewContainerTask:
@@ -330,12 +350,11 @@ func RunTask(ctx context.Context, task types.Task, cname string) {
 		utils.CheckError(errUnknownTask, utils.WarningMode)
 		return
 	}
-}
+}*/
 
-func RunEventTask(ctx context.Context, etype types.EventType) {
+func RunEventTask(ctx context.Context, etype types.EventType, eventId uint64) {
 
-	//fmt.Printf(blueMsgFormat, "Running event task...")
-
+	// TODO. Ask for the event sender
 	switch etype.Task {
 	case types.NewContainerTask:
 	case types.RestartContainerTask:
@@ -351,18 +370,20 @@ func RunEventTask(ctx context.Context, etype types.EventType) {
 		utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 		// Run task
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Running event task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
-		NewContainer(ctx, &cinfo.ContainerSetup)
+		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Executing event task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
+		NewContainer(ctx, &cinfo)
+		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Event task executed (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
 	case types.DeleteContainerTask:
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
 		return
 	}
+
+	// Solve related event
+	SolveEvent(eventId)
 }
 
 func RunEventEndingTask(ctx context.Context, etype types.EventType) {
-
-	//fmt.Printf(blueMsgFormat, "Running event ending task...")
 
 	switch etype.Task {
 	case types.NewContainerTask:
@@ -374,8 +395,9 @@ func RunEventEndingTask(ctx context.Context, etype types.EventType) {
 		cname := GetContainerName(uint64(rcid))  // TODO
 
 		// Run task
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Running event ending task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
+		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Executing ending task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
 		DeleteContainer(ctx, cname)
+		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Ending task executed (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
 	case types.DeleteContainerTask:
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -386,14 +408,14 @@ func RunEventEndingTask(ctx context.Context, etype types.EventType) {
 ///////////
 // Tasks //
 ///////////
-func NewContainer(ctx context.Context, csetup *types.ContainerSetup) {
+func NewContainer(ctx context.Context, cinfo *types.ContainerInfo) {
 
 	// Local actions
-	cid := createDockerContainer(ctx, &csetup.ContainerConfig, "") // Empty cname
+	cid := createDockerContainer(ctx, cinfo, "") // Empty cname
 	startDockerContainer(ctx, cid)
 
 	// Distributed actions
-	RecordContainer(ctx, cid, &csetup.ContainerType)
+	RecordContainer(ctx, cid, &cinfo.ContainerType)
 }
 
 func RestartContainer(ctx context.Context, cname string) {
@@ -407,7 +429,8 @@ func DeleteContainer(ctx context.Context, cname string) {
 	RemoveContainer(cname)
 
 	// Local actions
-	stopDockerContainer(ctx, cname)
+	// TODO. Timeout to stop a container
+	//stopDockerContainer(ctx, cname)
 	removeDockerContainer(ctx, cname)
 }
 
@@ -499,6 +522,7 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 	// To avoid repeated ports
 	var usedPorts []string
 
+	_pmutex.Lock()
 	for i := range ports {
 		for j := range ports[i] {
 			// Container configured port (string format)
@@ -528,6 +552,7 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 			}
 		}
 	}
+	_pmutex.Unlock()
 
 	return ports
 }

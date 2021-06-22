@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// DEL
 func WatchNewEvent() {
 
 	// Controller smart contract instance
@@ -22,26 +23,25 @@ func WatchNewEvent() {
 	sub, err := cinst.WatchNewEvent(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// TODO. Debug
-			event := managers.GetEvent(log.EventId)
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: NewEvent (EID=", log.EventId, ", Sender=", event.Sender.String(), ", DynType=", event.DynType, ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.EventId] {
+				ecache[log.EventId] = true
 
-			// Send a event reply containing the current node state
-			managers.SendReply(log.EventId, managers.GetNodeState())
+				// Debug
+				event := managers.GetEvent(log.EventId)
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.EventId, ", Sender=", event.Sender.String(), ", DynType=", event.DynType, ")\n")
 
-			//////////
-			// TEST //
-			/*time.Sleep(5 * time.Second)
-			replies, err := cinst.GetEventReplies(nil, log.EventId)
-			utils.CheckError(err, utils.WarningMode)
-			fmt.Println(replies)*/
-			//////////
-
+				// Send a event reply containing the current node state
+				go managers.SendReply(log.EventId, managers.GetNodeState())
+			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
@@ -60,18 +60,26 @@ func WatchRequiredReplies() {
 	sub, err := cinst.WatchRequiredReplies(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: RequiredReplies (EID=", log.EventId, ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.EventId] {
+				ecache[log.EventId] = true
 
-			// Select and vote the best event solver
-			solver := selectBestSolver(log.EventId, cinst)
-			if !utils.EmptyEthAddress(solver.String()) {
-				managers.VoteSolver(log.EventId, solver)
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredReplies (EID=", log.EventId, ")\n")
+
+				// Select and vote the best event solver
+				solver := selectBestSolver(log.EventId, cinst)
+				if !utils.EmptyEthAddress(solver.String()) {
+					go managers.VoteSolver(log.EventId, solver)
+				}
 			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
@@ -91,43 +99,42 @@ func WatchRequiredVotes(ctx context.Context) {
 	sub, err := cinst.WatchRequiredVotes(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: RequiredVotes (EID=", log.EventId, ", Solver=", log.Solver.String(), ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.EventId] {
+				ecache[log.EventId] = true
 
-			// Node account
-			from := managers.GetFromAccount()
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.EventId, ", Solver=", log.Solver.String(), ")\n")
 
-			// Am I the voted solver?
-			if log.Solver == from.Address {
-				// Get related event header
-				event := managers.GetEvent(log.EventId)
+				// Node account
+				from := managers.GetFromAccount()
 
-				// Decode dynamic event type
-				var etype types.EventType
-				utils.UnmarshalJSON(event.DynType, &etype)
+				// Am I the voted solver?
+				if log.Solver == from.Address {
+					// Get related event header
+					event := managers.GetEvent(log.EventId)
 
-				// Am I the event sender?
-				if event.Sender == from.Address {
-					// Get related event metadata
-					rcid := etype.Metadata["rcid"].(float64)         // TODO
-					cname := managers.GetContainerName(uint64(rcid)) // TODO
+					// TODO. Am I the event sender?
+					if event.Sender != from.Address {
+						// Decode dynamic event type
+						var etype types.EventType
+						utils.UnmarshalJSON(event.DynType, &etype)
 
-					managers.RunTask(ctx, types.RestartContainerTask, cname)
-				} else {
-					// Execute required task (from dynamic event type)
-					managers.RunEventTask(ctx, etype)
-
-					// TODO
-					managers.SolveEvent(log.EventId)
+						// Execute required task (from dynamic event type)
+						go managers.RunEventTask(ctx, etype, log.EventId)
+					} else {
+						// Solve related event
+						go managers.SolveEvent(log.EventId)
+					}
 				}
-
-				// Solve related event
-				//managers.SolveEvent(log.EventId)
 			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
@@ -147,28 +154,36 @@ func WatchEventSolved(ctx context.Context) {
 	sub, err := cinst.WatchEventSolved(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: EventSolved (EID=", log.EventId, ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.EventId] {
+				ecache[log.EventId] = true
 
-			// Get related event header
-			event := managers.GetEvent(log.EventId)
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.EventId, ")\n")
 
-			// Node account
-			from := managers.GetFromAccount()
+				// Get related event header
+				event := managers.GetEvent(log.EventId)
 
-			// Am I the event sender?
-			if event.Sender == from.Address {
-				// Decode dynamic event type
-				var etype types.EventType
-				utils.UnmarshalJSON(event.DynType, &etype)
+				// Node account
+				from := managers.GetFromAccount()
 
-				// Any completion tasks?
-				managers.RunEventEndingTask(ctx, etype)
+				// TODO. Am I the event sender and the event solver?
+				if event.Sender == from.Address && event.Solver != from.Address {
+					// Decode dynamic event type
+					var etype types.EventType
+					utils.UnmarshalJSON(event.DynType, &etype)
+
+					// Any completion tasks?
+					go managers.RunEventEndingTask(ctx, etype)
+				}
 			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
@@ -176,6 +191,7 @@ func WatchEventSolved(ctx context.Context) {
 	}
 }
 
+// DCR
 func WatchNewContainer(ctx context.Context) {
 
 	// Controller smart contract instance
@@ -188,28 +204,30 @@ func WatchNewContainer(ctx context.Context) {
 	sub, err := cinst.WatchNewContainer(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: NewContainer (RCID=", log.RegistryCtrId, ", CID=", log.CtrId, ", Host=", log.Host.String(), ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.RegistryCtrId] {
+				ecache[log.RegistryCtrId] = true
 
-			// Node account
-			from := managers.GetFromAccount()
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewContainer (RCID=", log.RegistryCtrId, ", CID=", log.CtrId, ", Host=", log.Host.String(), ")\n")
 
-			// Am I the container host?
-			if log.Host == from.Address {
-				// Set registry container ID to the local container
-				managers.SetContainerName(ctx, log.CtrId, managers.GetContainerName(log.RegistryCtrId))
+				// Node account
+				from := managers.GetFromAccount()
+
+				// Am I the container host?
+				if log.Host == from.Address {
+					// Set registry container ID to the local container
+					go managers.SetContainerName(ctx, log.CtrId, managers.GetContainerName(log.RegistryCtrId))
+				}
 			}
-
-			// TODO. Refresh local registry
-			/*ctrs := managers.GetContainerReg()
-			for key := range ctrs {
-				fmt.Println(key, " --> ", *ctrs[key])
-			}*/
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
@@ -228,19 +246,21 @@ func WatchContainerRemoved() {
 	sub, err := cinst.WatchContainerRemoved(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "DEBUG: ContainerRemoved (RCID=", log.RegistryCtrId, ")\n")
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.RegistryCtrId] {
+				ecache[log.RegistryCtrId] = true
 
-			// TODO. Refresh local registry
-			/*ctrs := managers.GetContainerReg()
-			for key := range ctrs {
-				fmt.Println(key, " --> ", *ctrs[key])
-			}*/
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerRemoved (RCID=", log.RegistryCtrId, ")\n")
+			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}

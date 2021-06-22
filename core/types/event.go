@@ -15,11 +15,12 @@ const (
 	// About containers
 	NewContainerTask
 	RestartContainerTask
-	StopContainerTask
+	StopContainerTask	// TODO: delete this option?
 	MigrateContainerTask
 	DeleteContainerTask
 
 	// About nodes
+	// TODO: update dynamically rules
 	PingNodeTask
 )
 

@@ -2,10 +2,12 @@ package eth
 
 import (
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/utils"
+	"time"
 )
 
 var (
@@ -48,16 +50,21 @@ func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.
 			}
 
 			if from == (accounts.Account{}) {
-				utils.CheckError(errNotFoundAddr, utils.WarningMode)
+				utils.CheckError(errNotFoundAddr, utils.FatalMode)
 			}
 		} else {
-			utils.CheckError(ErrMalformedAddr, utils.WarningMode)
+			utils.CheckError(ErrMalformedAddr, utils.FatalMode)
 		}
 	}
 
 	// Unlock the loaded account
 	err := ks.Unlock(from, passphrase)
-	utils.CheckError(err, utils.WarningMode)
+	utils.CheckError(err, utils.FatalMode)
+
+	// Debug
+	if err == nil {
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded account: "+from.Address.String(), "\n")
+	}
 
 	return
 }

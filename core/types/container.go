@@ -27,12 +27,21 @@ type Container struct {
 
 // General container information
 type ContainerInfo struct {
-	Id string
+	Id              string `json:"id"`
+	ApplicationInfo        // TODO
+	ImageTag        string `json:"tag"`
+	ImageArch       string `json:"arch"`
+	ImageOs         string `json:"os"`
+	ImageSize       uint64 `json:"isize"` // Virtual size (including shared layers)
 	ContainerSetup
-	IPAddress string `json:"ip"`
-	ImageArch string `json:"arch"`
-	ImageOs   string `json:"os"`
-	ImageSize uint64 `json:"isize"` // Virtual size (including shared layers)
+}
+
+// TODO
+type ApplicationInfo struct {
+	Ip          string // Virtual service IP
+	Protocol    string `json:"proto"` // Virtual service transport protocol (TCP or UDP)
+	Port        string // Virtual service port
+	Description string `json:"desc"`
 }
 
 type ContainerSetup struct {
@@ -49,11 +58,8 @@ type ContainerType struct {
 
 // Abstraction of all container configs
 type ContainerConfig struct {
-	ImageTag string `json:"tag"`
-	//CPULimit    uint64      `json:"cpu"`   // Maximum CPU quota in nano units to use (0 for unlimited)
-	MemLimit    uint64      `json:"mem"`   // Maximum memory to use in bytes (0 for unlimited)
-	VolumeBinds []string    `json:"vols"`  // Binding volumes
-	Ports       nat.PortMap `json:"ports"` // Binding ports
+	CPULimit uint64      `json:"cpu"`   // Maximum CPU quota in nano units to use (0 for unlimited)
+	MemLimit uint64      `json:"mem"`   // Maximum memory to use in bytes (0 for unlimited)
+	Volumes  []string    `json:"vols"`  // Binding volumes
+	Ports    nat.PortMap `json:"ports"` // Binding ports
 }
-
-// TODO Desired container state

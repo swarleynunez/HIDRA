@@ -17,6 +17,12 @@ const (
 	redFormat    = "\033[1;31m%s:%d %s\033[0m"
 )
 
+func init() {
+
+	// Remove timestamp from logs
+	log.SetFlags(0)
+}
+
 func CheckError(err error, mode int) {
 
 	if err != nil {
@@ -26,11 +32,10 @@ func CheckError(err error, mode int) {
 		file = filepath.Base(file)
 
 		switch mode {
-
 		case InfoMode:
 			log.Printf(blueFormat, file, line, err)
 		case WarningMode:
-			log.Printf(redFormat, file, line, err)
+			log.Printf(yellowFormat, file, line, err)
 		case PanicMode: // To recover control
 			log.Panicf(redFormat, file, line, err)
 		case FatalMode:

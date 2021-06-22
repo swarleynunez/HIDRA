@@ -13,12 +13,14 @@ contract Faucet {
     // Constructor
     constructor() public {
         // Initialize system actions
-        actions["sendEvent"] = ActionReps(100, 1);
-        actions["sendReply"] = ActionReps(100, 1);
-        actions["voteSolver"] = ActionReps(100, 1);
-        actions["solveEvent"] = ActionReps(100, 1);
-        actions["recordContainer"] = ActionReps(100, 1);
-        actions["removeContainer"] = ActionReps(100, 1);
+        actions["sendEvent"] = ActionReps(100, 0);
+        actions["sendReply"] = ActionReps(100, 0);
+        actions["voteSolver"] = ActionReps(100, 0);
+        actions["solveEvent"] = ActionReps(100, 0);
+        actions["registerApp"] = ActionReps(100, 0);
+        actions["registerCtr"] = ActionReps(100, 0);
+        actions["unregisterApp"] = ActionReps(100, 0);
+        actions["unregisterCtr"] = ActionReps(100, 0);
     }
 
     // Functions

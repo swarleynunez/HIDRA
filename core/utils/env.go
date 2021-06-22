@@ -8,7 +8,7 @@ func LoadEnv() {
 
 	// Load .env keys for this process
 	err := godotenv.Load()
-	CheckError(err, WarningMode)
+	CheckError(err, FatalMode)
 }
 
 func SetEnvKey(key, value string) {
