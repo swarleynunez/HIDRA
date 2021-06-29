@@ -19,6 +19,8 @@ contract Faucet {
         actions["solveEvent"] = ActionReps(100, 0);
         actions["registerApp"] = ActionReps(100, 0);
         actions["registerCtr"] = ActionReps(100, 0);
+        actions["activateCtr"] = ActionReps(100, 0);
+        actions["updateCtrInfo"] = ActionReps(100, 0);
         actions["unregisterApp"] = ActionReps(100, 0);
         actions["unregisterCtr"] = ActionReps(100, 0);
     }

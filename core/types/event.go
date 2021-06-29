@@ -6,7 +6,7 @@ import "github.com/ethereum/go-ethereum/common"
 type Task uint8
 
 const (
-	// About web resources
+	// About web resources, storage... TODO: IPFS?
 	CreateTask Task = iota
 	ReadTask
 	UpdateTask
@@ -14,27 +14,24 @@ const (
 
 	// About containers
 	NewContainerTask
-	RestartContainerTask
-	StopContainerTask	// TODO: delete this option?
 	MigrateContainerTask
-	DeleteContainerTask
 
 	// About nodes
-	// TODO: update dynamically rules
 	PingNodeTask
+	RequestResourcesTask // TODO: to update rules dynamically
 )
 
 // Network nodes events
 type Event struct {
-	DynType   string // Encoded dynamic event type
-	Sender    common.Address
-	CreatedAt uint64 // Unix time
-	Solver    common.Address
-	SolvedAt  uint64 // Unix time
+	DynType  string // Encoded dynamic event type
+	Sender   common.Address
+	Solver   common.Address
+	SentAt   uint64 // Unix time
+	SolvedAt uint64 // Unix time
 }
 
 // Dynamic event types
-type EventType struct {
+type EventType struct {	// TODO: delete
 	Spec Spec `json:"spec"` // Problematic spec
 	Task Task `json:"task"`
 	// TODO
@@ -45,6 +42,6 @@ type EventType struct {
 type Reply struct {
 	Replier   common.Address
 	NodeState string // Encoded node state
-	CreatedAt uint64 // Unix time
 	Voters    []common.Address
+	RepliedAt uint64 // Unix time
 }

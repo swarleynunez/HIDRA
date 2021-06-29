@@ -1,21 +1,24 @@
 pragma solidity ^0.6.6;
 
 library Event {
-    // Cluster event structure
     struct ClusterEvent {
-        string dynType; // Encoded dynamic event type
+        Type eType;
         address sender;
-        uint256 createdAt; // Unix time
         address solver;
+        Reply[] replies; // Set of node replies
+        uint256 sentAt; // Unix time
         uint256 solvedAt; // Unix time
-        ClusterReply[] replies; // Set of node replies
     }
 
-    // Node replies to an event
-    struct ClusterReply {
+    struct Type {
+        uint64 rcid;
+        string metadata; // Encoded dynamic metadata
+    }
+
+    struct Reply {
         address replier;
         string nodeState; // Encoded
-        uint256 createdAt; // Unix time
         address[] voters;
+        uint256 repliedAt; // Unix time
     }
 }

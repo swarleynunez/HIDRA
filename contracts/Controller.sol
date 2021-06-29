@@ -29,27 +29,28 @@ contract Controller {
     uint64[] private activeCtrs;
 
     // Main flow events
-    event NewEvent(uint64 eventId);
-    event RequiredReplies(uint64 eventId);
-    event RequiredVotes(uint64 eventId);
-    event EventSolved(uint64 eventId);
+    event NewEvent(uint64 eid);
+    event RequiredReplies(uint64 eid);
+    event RequiredVotes(uint64 eid);
+    event EventSolved(uint64 eid);
 
     // Container events
-    event NewContainer(uint64 registryCtrId);
-    event ContainerRemoved(uint64 registryCtrId);
+    event ContainerRegistered(uint64 rcid);
+    event ContainerUpdated(uint64 rcid);
+    event ContainerUnregistered(uint64 rcid);
 
     constructor() public {
         // Faucet instance
         faucet = new Faucet();
 
         // Initialize cluster
-        config = State.ClusterConfig(100, 75);
-        state = State.ClusterState(0, 0, 0, 0, block.timestamp);
+        config = State.ClusterConfig(100, 100);
+        state = State.ClusterState(0, 1, 1, 1, block.timestamp);
     }
 
-    /////////////////////
-    // Public functions//
-    /////////////////////
+    //////////////////////
+    // Public functions //
+    //////////////////////
     function registerNode(string memory specs) public {
         require(
             !isNodeRegistered(msg.sender),
@@ -67,39 +68,6 @@ contract Controller {
         return false;
     }
 
-    // Reputable
-    function sendEvent(string memory _dynType, string memory _nodeState)
-        public
-    {
-        require(isNodeRegistered(msg.sender), "The node is not registered");
-        require(
-            hasNodeReputation(
-                msg.sender,
-                faucet.getActionLimit("sendEvent") // Required reputation to send events
-            ),
-            "The node has not enough reputation"
-        );
-
-        // Create a new event
-        events[state.nextEventId].dynType = _dynType;
-        events[state.nextEventId].sender = msg.sender;
-        events[state.nextEventId].createdAt = block.timestamp;
-
-        // Create and link the first reply (event sender)
-        Event.ClusterReply memory reply;
-        reply.replier = msg.sender;
-        reply.nodeState = _nodeState;
-        reply.createdAt = block.timestamp;
-        events[state.nextEventId].replies.push(reply);
-
-        emit NewEvent(state.nextEventId);
-
-        state.nextEventId++;
-
-        // Update the sender reputation
-        updateReputation("sendEvent");
-    }
-
     function hasNodeReputation(address nodeAddr, int64 reputation)
         public
         view
@@ -112,54 +80,37 @@ contract Controller {
         return false;
     }
 
-    // Reputable
-    function sendReply(uint64 eventId, string memory _nodeState) public {
-        require(isNodeRegistered(msg.sender), "The node is not registered");
-        require(
-            hasNodeReputation(
-                msg.sender,
-                faucet.getActionLimit("sendReply") // Required reputation to send replies
-            ),
-            "The node has not enough reputation"
-        );
-        require(existEvent(eventId), "The event does not exist");
-        require(!isEventSolved(eventId), "The event is solved");
-        require(
-            !hasAlreadyReplied(eventId, msg.sender),
-            "The node has already replied the event"
-        );
-
-        // Create and link the reply to its event
-        Event.ClusterReply memory reply;
-        reply.replier = msg.sender;
-        reply.nodeState = _nodeState;
-        reply.createdAt = block.timestamp;
-        events[eventId].replies.push(reply);
-
-        if (
-            hasRequiredCount(
-                config.nodesThld,
-                uint64(events[eventId].replies.length)
-            )
-        ) {
-            emit RequiredReplies(eventId);
-        }
-
-        // Update the sender reputation
-        updateReputation("sendReply");
-    }
-
-    function existEvent(uint64 eventId) public view returns (bool) {
-        if (events[eventId].sender != address(0)) return true;
-        return false;
-    }
-
-    function hasAlreadyReplied(uint64 eventId, address nodeAddr)
+    function isApplicationOwner(uint64 appId, address nodeAddr)
         public
         view
         returns (bool)
     {
-        Event.ClusterReply[] memory replies = events[eventId].replies;
+        if (apps[appId].owner == nodeAddr) return true;
+        return false;
+    }
+
+    function isContainerHost(uint64 rcid, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        Container.Instance[] memory insts = ctrs[rcid].instances;
+        if (insts.length > 0 && insts[insts.length - 1].host == nodeAddr)
+            return true;
+        return false;
+    }
+
+    function existEvent(uint64 eid) public view returns (bool) {
+        if (events[eid].sender != address(0)) return true;
+        return false;
+    }
+
+    function hasAlreadyReplied(uint64 eid, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        Event.Reply[] memory replies = events[eid].replies;
 
         for (uint64 i = 0; i < replies.length; i++) {
             if (replies[i].replier == nodeAddr) return true;
@@ -168,69 +119,12 @@ contract Controller {
         return false;
     }
 
-    function getEventReplies(uint64 eventId)
-        public
-        view
-        returns (Event.ClusterReply[] memory)
-    {
-        return events[eventId].replies;
-    }
-
-    // Reputable
-    function voteSolver(uint64 eventId, address candidateAddr) public {
-        require(isNodeRegistered(msg.sender), "The node is not registered");
-        require(
-            hasNodeReputation(
-                msg.sender,
-                faucet.getActionLimit("voteSolver") // Required reputation to vote solvers
-            ),
-            "The node has not enough reputation"
-        );
-        require(existEvent(eventId), "The event does not exist");
-        require(!isEventSolved(eventId), "The event is solved");
-        require(
-            hasRequiredCount(
-                config.nodesThld,
-                uint64(events[eventId].replies.length)
-            ),
-            "The event does not have the required replies"
-        );
-        require(
-            hasAlreadyReplied(eventId, candidateAddr),
-            "The candidate has not replied the event"
-        );
-        require(
-            !hasAlreadyVoted(eventId, msg.sender),
-            "The node has already voted a solver"
-        );
-
-        // Search candidate
-        Event.ClusterReply[] memory replies = events[eventId].replies;
-
-        for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].replier == candidateAddr) {
-                // Vote candidate (storage)
-                events[eventId].replies[i].voters.push(msg.sender);
-
-                uint64 votes = uint64(replies[i].voters.length + 1);
-                if (hasRequiredCount(config.votesThld, votes)) {
-                    emit RequiredVotes(eventId);
-                }
-
-                break;
-            }
-        }
-
-        // Update the sender reputation
-        updateReputation("voteSolver");
-    }
-
-    function hasAlreadyVoted(uint64 eventId, address nodeAddr)
+    function hasAlreadyVoted(uint64 eid, address nodeAddr)
         public
         view
         returns (bool)
     {
-        Event.ClusterReply[] memory replies = events[eventId].replies;
+        Event.Reply[] memory replies = events[eid].replies;
 
         for (uint64 i = 0; i < replies.length; i++) {
             for (uint64 j = 0; j < replies[i].voters.length; j++) {
@@ -241,8 +135,199 @@ contract Controller {
         return false;
     }
 
-    // Reputable
-    function solveEvent(uint64 eventId) public {
+    function isEventSolved(uint64 eid) public view returns (bool) {
+        if (events[eid].solvedAt != 0) return true;
+        return false;
+    }
+
+    function canSolveEvent(uint64 eid, address nodeAddr)
+        public
+        view
+        returns (bool)
+    {
+        if (events[eid].solver == nodeAddr) return true;
+        return false;
+    }
+
+    function existApplication(uint64 appId) public view returns (bool) {
+        if (apps[appId].owner != address(0)) return true;
+        return false;
+    }
+
+    function isApplicationUnregistered(uint64 appId)
+        public
+        view
+        returns (bool)
+    {
+        if (apps[appId].unregisteredAt != 0) return true;
+        return false;
+    }
+
+    function existContainer(uint64 rcid) public view returns (bool) {
+        if (ctrs[rcid].appId != 0) return true;
+        return false;
+    }
+
+    function isContainerUnregistered(uint64 rcid) public view returns (bool) {
+        if (ctrs[rcid].unregisteredAt != 0) return true;
+        return false;
+    }
+
+    function isContainerActive(uint64 rcid) public view returns (bool) {
+        for (uint64 i = 0; i < activeCtrs.length; i++) {
+            if (activeCtrs[i] == rcid) return true;
+        }
+
+        return false;
+    }
+
+    /////////////////////////
+    // Reputable functions //
+    /////////////////////////
+    function sendEvent(
+        uint64 _rcid,
+        string memory _metadata,
+        string memory _nodeState
+    ) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("sendEvent") // Required reputation to send events
+            ),
+            "The node has not enough reputation"
+        );
+
+        // Create a new event
+        events[state.nextEventId].eType.metadata = _metadata;
+        events[state.nextEventId].sender = msg.sender;
+        events[state.nextEventId].sentAt = block.timestamp;
+
+        if (_rcid > 0) {
+            require(existContainer(_rcid), "The container does not exist");
+            require(
+                isApplicationOwner(ctrs[_rcid].appId, msg.sender) ||
+                    isContainerHost(_rcid, msg.sender),
+                "The node is neither the container owner nor the host"
+            );
+
+            // Link an existing container to the new event
+            events[state.nextEventId].eType.rcid = _rcid;
+        }
+
+        // Link the first reply (event sender)
+        Event.Reply memory reply;
+        reply.replier = msg.sender;
+        reply.nodeState = _nodeState;
+        reply.repliedAt = block.timestamp;
+        events[state.nextEventId].replies.push(reply);
+
+        emit NewEvent(state.nextEventId);
+
+        state.nextEventId++;
+
+        // Update the sender reputation
+        updateReputation("sendEvent");
+    }
+
+    function sendReply(uint64 eid, string memory _nodeState) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("sendReply") // Required reputation to send replies
+            ),
+            "The node has not enough reputation"
+        );
+        require(existEvent(eid), "The event does not exist");
+        require(!isEventSolved(eid), "The event is solved");
+        require(
+            !hasAlreadyReplied(eid, msg.sender),
+            "The node has already replied the event"
+        );
+
+        // Create and link the reply to its event
+        Event.Reply memory reply;
+        reply.replier = msg.sender;
+        reply.nodeState = _nodeState;
+        reply.repliedAt = block.timestamp;
+        events[eid].replies.push(reply);
+
+        if (
+            hasRequiredCount(
+                config.nodesThld,
+                uint64(events[eid].replies.length)
+            )
+        ) {
+            emit RequiredReplies(eid);
+        }
+
+        // Update the sender reputation
+        updateReputation("sendReply");
+    }
+
+    function voteSolver(uint64 eid, address candidateAddr) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("voteSolver") // Required reputation to vote solvers
+            ),
+            "The node has not enough reputation"
+        );
+        require(existEvent(eid), "The event does not exist");
+        require(!isEventSolved(eid), "The event is solved");
+        require(
+            hasRequiredCount(
+                config.nodesThld,
+                uint64(events[eid].replies.length)
+            ),
+            "The event does not have the required replies"
+        );
+        require(
+            hasAlreadyReplied(eid, candidateAddr),
+            "The candidate has not replied the event yet"
+        );
+        require(
+            !hasAlreadyVoted(eid, msg.sender),
+            "The node has already voted a solver"
+        );
+
+        Event.Reply[] memory replies = events[eid].replies;
+
+        // Search candidate
+        for (uint64 i = 0; i < replies.length; i++) {
+            if (replies[i].replier == candidateAddr) {
+                // Vote candidate
+                events[eid].replies[i].voters.push(msg.sender);
+
+                uint64 votes = uint64(replies[i].voters.length + 1);
+                if (hasRequiredCount(config.votesThld, votes)) {
+                    // Set event solver
+                    events[eid].solver = candidateAddr;
+
+                    // Add a new container instance (if applicable)
+                    uint64 rcid = events[eid].eType.rcid;
+                    if (rcid > 0) {
+                        if (!isContainerHost(rcid, candidateAddr)) {
+                            Container.Instance memory inst;
+                            inst.host = candidateAddr;
+                            ctrs[rcid].instances.push(inst);
+                        }
+                    }
+
+                    emit RequiredVotes(eid);
+                }
+
+                break;
+            }
+        }
+
+        // Update the sender reputation
+        updateReputation("voteSolver");
+    }
+
+    function solveEvent(uint64 eid) public {
         require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
             hasNodeReputation(
@@ -251,51 +336,36 @@ contract Controller {
             ),
             "The node has not enough reputation"
         );
-        require(existEvent(eventId), "The event does not exist");
-        require(!isEventSolved(eventId), "The event is already solved");
+        require(existEvent(eid), "The event does not exist");
+        require(!isEventSolved(eid), "The event is already solved");
         require(
-            canSolveEvent(eventId, msg.sender),
+            canSolveEvent(eid, msg.sender),
             "The node can not solve the event"
         );
 
-        // Update event solver info
-        events[eventId].solver = msg.sender;
-        events[eventId].solvedAt = block.timestamp;
+        // Solve event
+        events[eid].solvedAt = block.timestamp;
 
-        emit EventSolved(eventId);
+        // Activate container (if applicable)
+        uint64 rcid = events[eid].eType.rcid;
+        if (rcid > 0) {
+            // Set container start time and activate it
+            Container.Instance[] storage insts = ctrs[rcid].instances;
+            if (insts[insts.length - 1].startedAt == 0)
+                insts[insts.length - 1].startedAt = block.timestamp;
+            if (!isContainerActive(rcid)) activeCtrs.push(rcid);
+        }
+
+        emit EventSolved(eid);
 
         // Update the sender reputation
         updateReputation("solveEvent");
     }
 
-    function isEventSolved(uint64 eventId) public view returns (bool) {
-        if (events[eventId].solver != address(0)) return true;
-        return false;
-    }
-
-    function canSolveEvent(uint64 eventId, address nodeAddr)
-        public
-        view
-        returns (bool)
-    {
-        Event.ClusterReply[] memory replies = events[eventId].replies;
-        uint64 votes;
-
-        for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].replier == nodeAddr) {
-                votes = uint64(replies[i].voters.length);
-                break;
-            }
-        }
-
-        if (hasRequiredCount(config.votesThld, votes)) return true;
-        return false;
-    }
-
-    // Reputable
     function registerApplication(
         string memory _info,
-        Container.ClusterContainer[] memory _ctrs
+        Container.ClusterContainer[] memory _ctrs,
+        bool autodeploy
     ) public {
         require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
@@ -306,10 +376,10 @@ contract Controller {
             "The node has not enough reputation"
         );
 
-        // Record a new application
+        // Register a new application
         apps[state.nextAppId].owner = msg.sender;
         apps[state.nextAppId].info = _info;
-        apps[state.nextAppId].createdAt = block.timestamp;
+        apps[state.nextAppId].registeredAt = block.timestamp;
 
         // Set application as active
         activeApps.push(state.nextAppId);
@@ -317,7 +387,7 @@ contract Controller {
         // Update the sender reputation
         updateReputation("registerApp");
 
-        // Record containers
+        // Register all application containers
         for (uint64 i = 0; i < _ctrs.length; i++) {
             require(
                 hasNodeReputation(
@@ -327,14 +397,17 @@ contract Controller {
                 "The node has not enough reputation"
             );
 
-            recordContainer(state.nextAppId, _ctrs[i].info);
+            recordContainer(state.nextAppId, _ctrs[i].info, autodeploy);
         }
 
         state.nextAppId++;
     }
 
-    // Reputable
-    function registerContainer(uint64 appId, string memory info) public {
+    function registerContainer(
+        uint64 appId,
+        string memory info,
+        bool autodeploy
+    ) public {
         require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
             hasNodeReputation(
@@ -345,38 +418,86 @@ contract Controller {
         );
         require(existApplication(appId), "The application does not exist");
         require(
-            isApplicationOwner(msg.sender, appId),
+            isApplicationOwner(appId, msg.sender),
             "The node is not the application owner"
         );
-        require(isApplicationActive(appId), "The application is not active");
+        require(
+            !isApplicationUnregistered(appId),
+            "The application was unregistered"
+        );
 
-        recordContainer(appId, info);
+        recordContainer(appId, info, autodeploy);
     }
 
-    function existApplication(uint64 appId) public view returns (bool) {
-        if (apps[appId].owner != address(0)) return true;
-        return false;
-    }
+    function activateContainers(uint64[] memory rcids) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(rcids.length > 0, "Container identifiers are not provided");
 
-    function isApplicationOwner(address nodeAddr, uint64 appId)
-        public
-        view
-        returns (bool)
-    {
-        if (apps[appId].owner == nodeAddr) return true;
-        return false;
-    }
+        // Activate each container
+        for (uint64 i = 0; i < rcids.length; i++) {
+            require(
+                hasNodeReputation(
+                    msg.sender,
+                    faucet.getActionLimit("activateCtr") // Required reputation to activate containers
+                ),
+                "The node has not enough reputation"
+            );
+            require(existContainer(rcids[i]), "The container does not exist");
+            require(
+                isApplicationOwner(ctrs[rcids[i]].appId, msg.sender),
+                "The node is not the container owner"
+            );
+            require(
+                isContainerHost(rcids[i], msg.sender),
+                "The node is not the container host"
+            );
+            require(
+                !isContainerUnregistered(rcids[i]),
+                "The container was unregistered"
+            );
+            require(
+                !isContainerActive(rcids[i]),
+                "The container is already activated"
+            );
 
-    function isApplicationActive(uint64 appId) public view returns (bool) {
-        for (uint64 i = 0; i < activeApps.length; i++) {
-            if (activeApps[i] == appId) return true;
+            // Set container start time and activate it
+            Container.Instance[] storage insts = ctrs[rcids[i]].instances;
+            insts[insts.length - 1].startedAt = block.timestamp;
+            activeCtrs.push(rcids[i]);
+
+            // Update the sender reputation
+            updateReputation("activateCtr");
         }
-
-        return false;
     }
 
-    // Reputable
-    function unregisterApplication(uint64 _appId) public {
+    function updateContainerInfo(uint64 rcid, string memory _info) public {
+        require(isNodeRegistered(msg.sender), "The node is not registered");
+        require(
+            hasNodeReputation(
+                msg.sender,
+                faucet.getActionLimit("updateCtrInfo") // Required reputation to update containers info
+            ),
+            "The node has not enough reputation"
+        );
+        require(existContainer(rcid), "The container does not exist");
+        require(
+            isApplicationOwner(ctrs[rcid].appId, msg.sender),
+            "The node is not the container owner"
+        );
+        require(
+            !isContainerUnregistered(rcid),
+            "The container was unregistered"
+        );
+
+        ctrs[rcid].info = _info;
+
+        emit ContainerUpdated(rcid);
+
+        // Update the sender reputation
+        updateReputation("updateCtrInfo");
+    }
+
+    function unregisterApplication(uint64 appId) public {
         require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
             hasNodeReputation(
@@ -385,24 +506,27 @@ contract Controller {
             ),
             "The node has not enough reputation"
         );
-        require(existApplication(_appId), "The application does not exist");
+        require(existApplication(appId), "The application does not exist");
         require(
-            isApplicationOwner(msg.sender, _appId),
+            isApplicationOwner(appId, msg.sender),
             "The node is not the application owner"
         );
-        require(isApplicationActive(_appId), "The application is not active");
+        require(
+            !isApplicationUnregistered(appId),
+            "The application has already been unregistered"
+        );
 
         // Set application removal time and deactivate it
-        apps[_appId].deletedAt = block.timestamp;
-        deactivateApplicationById(_appId);
+        apps[appId].unregisteredAt = block.timestamp;
+        deactivateApplicationById(appId);
 
         // Update the sender reputation
         updateReputation("unregisterApp");
 
-        // Deactivate all application containers
+        // Unregister all application containers
         uint64 i = 0;
         while (i < activeCtrs.length) {
-            if (ctrs[activeCtrs[i]].appId == _appId) {
+            if (ctrs[activeCtrs[i]].appId == appId) {
                 require(
                     hasNodeReputation(
                         msg.sender,
@@ -412,11 +536,11 @@ contract Controller {
                 );
 
                 // Set container removal time and deactivate it
-                ctrs[activeCtrs[i]].finishedAt = block.timestamp;
+                ctrs[activeCtrs[i]].unregisteredAt = block.timestamp;
                 activeCtrs[i] = activeCtrs[activeCtrs.length - 1];
                 activeCtrs.pop();
 
-                emit ContainerRemoved(activeCtrs[i]);
+                emit ContainerUnregistered(activeCtrs[i]);
 
                 // Update the sender reputation
                 updateReputation("unregisterCtr");
@@ -424,8 +548,7 @@ contract Controller {
         }
     }
 
-    // Reputable
-    function unregisterContainer(uint64 registryCtrId) public {
+    function unregisterContainer(uint64 rcid) public {
         require(isNodeRegistered(msg.sender), "The node is not registered");
         require(
             hasNodeReputation(
@@ -434,50 +557,43 @@ contract Controller {
             ),
             "The node has not enough reputation"
         );
-        require(existContainer(registryCtrId), "The container does not exist");
+        require(existContainer(rcid), "The container does not exist");
         require(
-            isContainerHost(msg.sender, registryCtrId),
-            "The node is not the container host"
+            isApplicationOwner(ctrs[rcid].appId, msg.sender),
+            "The node is not the container owner"
         );
         require(
-            isContainerActive(registryCtrId),
-            "The container is not active"
+            !isContainerUnregistered(rcid),
+            "The container has already been unregistered"
         );
 
         // Set container removal time and deactivate it
-        ctrs[registryCtrId].finishedAt = block.timestamp;
-        deactivateContainerById(registryCtrId);
+        ctrs[rcid].unregisteredAt = block.timestamp;
+        deactivateContainerById(rcid);
 
-        emit ContainerRemoved(registryCtrId);
+        emit ContainerUnregistered(rcid);
 
         // Update the sender reputation
         updateReputation("unregisterCtr");
     }
 
-    function existContainer(uint64 registryCtrId) public view returns (bool) {
-        if (ctrs[registryCtrId].host != address(0)) return true;
-        return false;
-    }
-
-    function isContainerHost(address nodeAddr, uint64 registryCtrId)
+    /////////////
+    // Getters //
+    /////////////
+    function getEventReplies(uint64 eid)
         public
         view
-        returns (bool)
+        returns (Event.Reply[] memory)
     {
-        if (ctrs[registryCtrId].host == nodeAddr) return true;
-        return false;
+        return events[eid].replies;
     }
 
-    function isContainerActive(uint64 registryCtrId)
+    function getContainerInstances(uint64 rcid)
         public
         view
-        returns (bool)
+        returns (Container.Instance[] memory)
     {
-        for (uint64 i = 0; i < activeCtrs.length; i++) {
-            if (activeCtrs[i] == registryCtrId) return true;
-        }
-
-        return false;
+        return ctrs[rcid].instances;
     }
 
     function getActiveApplications() public view returns (uint64[] memory) {
@@ -488,9 +604,9 @@ contract Controller {
         return activeCtrs;
     }
 
-    //////////////////////
-    // Private functions//
-    //////////////////////
+    ///////////////////////
+    // Private functions //
+    ///////////////////////
     function hasRequiredCount(uint8 threshold, uint64 count)
         private
         view
@@ -508,16 +624,23 @@ contract Controller {
         nc.setVariation(faucet.getActionVariation(action));
     }
 
-    function recordContainer(uint64 _appId, string memory _info) private {
+    function recordContainer(
+        uint64 _appId,
+        string memory _info,
+        bool autodeploy
+    ) private {
         ctrs[state.nextRegistryCtrId].appId = _appId;
-        ctrs[state.nextRegistryCtrId].host = msg.sender;
         ctrs[state.nextRegistryCtrId].info = _info;
-        ctrs[state.nextRegistryCtrId].startedAt = block.timestamp;
+        ctrs[state.nextRegistryCtrId].registeredAt = block.timestamp;
 
-        // Set container as active
-        activeCtrs.push(state.nextRegistryCtrId);
+        // Owner autodeploy mode
+        if (autodeploy) {
+            Container.Instance memory inst;
+            inst.host = msg.sender;
+            ctrs[state.nextRegistryCtrId].instances.push(inst);
+        }
 
-        emit NewContainer(state.nextRegistryCtrId);
+        emit ContainerRegistered(state.nextRegistryCtrId);
 
         state.nextRegistryCtrId++;
 
@@ -530,17 +653,17 @@ contract Controller {
             if (activeApps[i] == appId) {
                 activeApps[i] = activeApps[activeApps.length - 1];
                 activeApps.pop();
-                break;
+                //break;
             }
         }
     }
 
-    function deactivateContainerById(uint64 registryCtrId) private {
+    function deactivateContainerById(uint64 rcid) private {
         for (uint64 i = 0; i < activeCtrs.length; i++) {
-            if (activeCtrs[i] == registryCtrId) {
+            if (activeCtrs[i] == rcid) {
                 activeCtrs[i] = activeCtrs[activeCtrs.length - 1];
                 activeCtrs.pop();
-                break;
+                //break;
             }
         }
     }

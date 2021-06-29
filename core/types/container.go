@@ -19,16 +19,16 @@ const (
 
 // Public and static info (related to the distributed registry)
 type Container struct {
-	Host       common.Address // Node which runs the container
-	Info       string         // Encoded
-	StartedAt  uint64         // Unix time
-	FinishedAt uint64         // Unix time
+	Host      common.Address // Node which runs the container
+	Info      string         // Encoded
+	CreatedAt uint64         // Unix time
+	DeletedAt uint64         // Unix time
 }
 
 // General container information
 type ContainerInfo struct {
-	Id              string `json:"id"`
-	ApplicationInfo        // TODO
+	//Id              string `json:"id"`
+	//ApplicationInfo        // TODO
 	ImageTag        string `json:"tag"`
 	ImageArch       string `json:"arch"`
 	ImageOs         string `json:"os"`

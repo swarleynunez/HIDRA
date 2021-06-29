@@ -27,14 +27,17 @@ contract Node {
 
     // Modifiers
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can call this function");
+        require(
+            msg.sender == owner,
+            "Only the contract owner can call this function"
+        );
         _;
     }
 
     modifier onlyController() {
         require(
             msg.sender == controller,
-            "Only the controller can call this function"
+            "Only the controller contract can call this function"
         );
         _;
     }

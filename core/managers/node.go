@@ -358,7 +358,6 @@ func RunEventTask(ctx context.Context, etype types.EventType, eventId uint64) {
 	switch etype.Task {
 	case types.NewContainerTask:
 	case types.RestartContainerTask:
-	case types.StopContainerTask:
 	case types.MigrateContainerTask:
 		// Get related event metadata
 		rcid := etype.Metadata["rcid"].(float64) // TODO
@@ -388,7 +387,6 @@ func RunEventEndingTask(ctx context.Context, etype types.EventType) {
 	switch etype.Task {
 	case types.NewContainerTask:
 	case types.RestartContainerTask:
-	case types.StopContainerTask:
 	case types.MigrateContainerTask:
 		// Get related event metadata
 		rcid := etype.Metadata["rcid"].(float64) // TODO
