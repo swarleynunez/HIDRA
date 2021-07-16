@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/swarleynunez/superfog/core/managers"
+	"github.com/swarleynunez/superfog/core/utils"
+	"time"
 )
 
 var deployCmd = &cobra.Command{
@@ -15,6 +18,12 @@ var deployCmd = &cobra.Command{
 		managers.InitNode(ctx, true)
 
 		// Deploy a new controller
-		managers.DeployController()
+		caddr := managers.DeployController()
+
+		// Save the controller address
+		utils.SetEnvKey("CONTROLLER_ADDR", caddr.String())
+
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Controller address: ", caddr.String(), "\n")
 	},
 }

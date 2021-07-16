@@ -1,17 +1,22 @@
 package types
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"github.com/ethereum/go-ethereum/common"
+	"math/big"
+	"net"
+)
 
+// DCR application model
 type Application struct {
-	Owner     common.Address
-	Info      string // Encoded
-	CreatedAt uint64 // Unix time
-	DeletedAt uint64 // Unix time
+	Owner          common.Address
+	Info           string   // Encoded application info (ApplicationInfo struct)
+	RegisteredAt   *big.Int // Unix time
+	UnregisteredAt *big.Int // Unix time
 }
 
-/*type ApplicationInfo struct {
-	Ip          string // Virtual service IP
-	Protocol    string `json:"proto"` // Virtual service transport protocol (TCP or UDP)
-	Port        string // Virtual service port
+type ApplicationInfo struct {
+	IP          net.IP `json:"ip"`   // Virtual service IP
+	Port        uint16 `json:"port"` // Virtual service port
+	Protocol    string `json:"prot"` // Virtual service transport protocol (TCP or UDP)
 	Description string `json:"desc"`
-}*/
+}

@@ -1,30 +1,29 @@
 package types
 
-// Specification types
-type Spec uint8
+type Rule struct {
+	NameId     string // Unique
+	Resource   resource
+	MetricType RuleMetricType
+	Comparator RuleComparator
+	Limit      interface{} // uint64, float64 or string
+	Action     action
+	Msg        string
+}
+
+// Rule metric types for each resource
+type RuleMetricType uint8
 
 const (
-	CpuSpec Spec = iota
-	MemSpec
-	DiskSpec
-	PktSentSpec
-	PktRecvSpec
-)
-
-// Rule metric type for each spec
-type MetricType uint8
-
-const (
-	UnitsMetric MetricType = iota
+	UnitsMetric RuleMetricType = iota
 	PercentMetric
 	TagMetric
 )
 
 // Rule comparison operators
-type Comparator uint8
+type RuleComparator uint8
 
 const (
-	EqualComp Comparator = iota
+	EqualComp RuleComparator = iota
 	NotEqualComp
 	LessComp
 	LessOrEqualComp
@@ -33,23 +32,12 @@ const (
 )
 
 // Rule actions for the enforcer
-type Action uint8
+type action uint8
 
 const (
-	IgnoreAction    Action = iota
+	IgnoreAction    action = iota
 	WarnAction             // Msg to stdout
 	LogAction              // Msg to log file
-	ProceedAction          // Do it yourself
-	SendEventAction        // Ask for help
+	ProceedAction          // Execute a task
+	SendEventAction        // Ask for cluster help
 )
-
-// Rules to check in clients
-type Rule struct {
-	NameId     string // Unique
-	Spec       Spec
-	MetricType MetricType
-	Comparator Comparator
-	Bound      interface{} // uint64, float64 or string
-	Action     Action
-	Msg        string
-}

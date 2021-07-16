@@ -1,21 +1,19 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.6.6;
 
-library Event {
-    struct ClusterEvent {
-        Type eType;
+// Distributed Event Logger
+library DEL {
+    struct Event {
+        string eType; // Encoded event type
         address sender;
         address solver;
-        Reply[] replies; // Set of node replies
+        EventReply[] replies; // Set of node replies
+        uint64 rcid; // Optional, depending on the event type
         uint256 sentAt; // Unix time
         uint256 solvedAt; // Unix time
     }
 
-    struct Type {
-        uint64 rcid;
-        string metadata; // Encoded dynamic metadata
-    }
-
-    struct Reply {
+    struct EventReply {
         address replier;
         string nodeState; // Encoded
         address[] voters;

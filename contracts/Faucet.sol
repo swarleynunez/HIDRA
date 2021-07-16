@@ -1,31 +1,29 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.6.6;
 
+import "./DRS.sol";
+
 contract Faucet {
-    // Limit, reward and penalty reputations for system actions
-    struct ActionReps {
-        int64 limit;
-        int64 variation;
-    }
+    // Action list
+    mapping(string => DRS.ReputableAction) private actions;
 
-    // System actions list
-    mapping(string => ActionReps) private actions;
-
-    // Constructor
     constructor() public {
         // Initialize system actions
-        actions["sendEvent"] = ActionReps(100, 0);
-        actions["sendReply"] = ActionReps(100, 0);
-        actions["voteSolver"] = ActionReps(100, 0);
-        actions["solveEvent"] = ActionReps(100, 0);
-        actions["registerApp"] = ActionReps(100, 0);
-        actions["registerCtr"] = ActionReps(100, 0);
-        actions["activateCtr"] = ActionReps(100, 0);
-        actions["updateCtrInfo"] = ActionReps(100, 0);
-        actions["unregisterApp"] = ActionReps(100, 0);
-        actions["unregisterCtr"] = ActionReps(100, 0);
+        actions["sendEvent"] = DRS.ReputableAction(100, 1);
+        actions["sendReply"] = DRS.ReputableAction(100, 1);
+        actions["voteSolver"] = DRS.ReputableAction(100, 1);
+        actions["solveEvent"] = DRS.ReputableAction(100, 1);
+        actions["registerApp"] = DRS.ReputableAction(100, 1);
+        actions["registerCtr"] = DRS.ReputableAction(100, 1);
+        actions["activateCtr"] = DRS.ReputableAction(100, 1);
+        actions["updateCtr"] = DRS.ReputableAction(100, 1);
+        actions["unregisterApp"] = DRS.ReputableAction(100, 1);
+        actions["unregisterCtr"] = DRS.ReputableAction(100, 1);
     }
 
-    // Functions
+    /////////////
+    // Getters //
+    /////////////
     function getActionLimit(string memory action) public view returns (int64) {
         return actions[action].limit;
     }

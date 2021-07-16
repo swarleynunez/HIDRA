@@ -1,15 +1,20 @@
 package managers
 
 import (
-	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/bindings"
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
 	"os"
-	"time"
 )
+
+// To simulate reputable action execution
+type RepAction struct {
+	name  string
+	count int
+}
 
 ///////////////
 // Instances //
@@ -24,9 +29,6 @@ func controllerInstance() (cinst *bindings.Controller) {
 		inst, err := bindings.NewController(common.HexToAddress(caddr), _ethc)
 		utils.CheckError(err, utils.FatalMode)
 		cinst = inst
-
-		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", caddr, "\n")
 	} else {
 		utils.CheckError(eth.ErrMalformedAddr, utils.FatalMode)
 	}
@@ -53,11 +55,11 @@ func nodeInstance(naddr common.Address) (ninst *bindings.Node) {
 /////////////
 // Setters //
 /////////////
-func DeployController() {
+func DeployController() (caddr common.Address) {
 
 	// Create and configure a transactor
 	_nmutex.Lock()
-	auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, DeployControllerGasLimit)
+	auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 	_nonce++ // Next nonce for the next transaction
 	_nmutex.Unlock()
 
@@ -65,168 +67,263 @@ func DeployController() {
 	caddr, _, _, err := bindings.DeployController(auth, _ethc)
 	utils.CheckError(err, utils.FatalMode)
 
-	// Save the controller address
-	utils.SetEnvKey("CONTROLLER_ADDR", caddr.String())
-
-	// Debug
-	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Controller address: ", caddr.String(), "\n")
+	return
 }
 
 func RegisterNode() {
 
-	if !IsNodeRegistered(_from.Address) {
+	// Create and configure a transactor
+	_nmutex.Lock()
+	auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
+	_nonce++ // Next nonce for the next transaction
+	_nmutex.Unlock()
 
-		specs := GetNodeSpecs()
-
-		// Create and configure a transactor
-		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RegisterNodeGasLimit)
-		_nonce++ // Next nonce for the next transaction
-		_nmutex.Unlock()
-
-		// Send transaction
-		_, err := _cinst.RegisterNode(auth, utils.MarshalJSON(specs))
-		utils.CheckError(err, utils.FatalMode)
-
-		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node registered\n")
-	} else {
-		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node is already registered\n")
-	}
+	// Send transaction
+	_, err := _cinst.RegisterNode(auth, utils.MarshalJSON(GetSpecs()))
+	utils.CheckError(err, utils.FatalMode)
 }
 
-////////////////
-// Reputables //
-////////////////
-func SendEvent(etype *types.EventType, state *types.State) {
+/////////////////////////
+// Reputable functions //
+/////////////////////////
+func SendEvent(etype *types.EventType, rcid uint64, nstate *types.State) {
 
-	// Reputation limit for this function
 	limit := getActionLimit(SendEventAction)
 
-	if hasNodeReputation(limit) {
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) {
+		// Has the event a linked container?
+		if rcid > 0 {
+			appid := GetContainer(rcid).Appid
+			if !existContainer(rcid) ||
+				(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
+				isContainerAutodeployed(rcid) ||
+				isContainerUnregistered(rcid) {
+				return
+			}
+		}
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendEventGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
 		// Send transaction
-		createdAt := uint64(time.Now().Unix())
-		_, err := _cinst.SendEvent(auth, utils.MarshalJSON(etype), createdAt, utils.MarshalJSON(state))
+		_, err := _cinst.SendEvent(auth, utils.MarshalJSON(etype), rcid, utils.MarshalJSON(nstate))
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
 
-func SendReply(eid uint64, state *types.State) {
+func SendReply(eid uint64, nstate *types.State) {
 
-	// Reputation limit for this function
 	limit := getActionLimit(SendReplyAction)
 
-	if hasNodeReputation(limit) &&
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
 		!hasAlreadyReplied(eid, _from.Address) {
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SendReplyGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
 		// Send transaction
-		createdAt := uint64(time.Now().Unix())
-		_, err := _cinst.SendReply(auth, eid, utils.MarshalJSON(state), createdAt)
+		_, err := _cinst.SendReply(auth, eid, utils.MarshalJSON(nstate))
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
 
-func VoteSolver(eid uint64, addr common.Address) {
+func VoteSolver(eid uint64, candAddr common.Address) {
 
-	// Reputation limit for this function
 	limit := getActionLimit(VoteSolverAction)
+	thld := getClusterConfig().NodesThld
+	count := uint64(len(GetEventReplies(eid)))
 
-	if hasNodeReputation(limit) &&
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
-		hasAlreadyReplied(eid, addr) &&
-		!hasAlreadyVoted(eid) {
+		hasRequiredCount(thld, count) &&
+		hasAlreadyReplied(eid, candAddr) &&
+		!hasAlreadyVoted(eid, _from.Address) {
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, VoteSolverGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
 		// Send transaction
-		_, err := _cinst.VoteSolver(auth, eid, addr)
+		_, err := _cinst.VoteSolver(auth, eid, candAddr)
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
 
 func SolveEvent(eid uint64) {
 
-	// Reputation limit for this function
 	limit := getActionLimit(SolveEventAction)
 
-	if hasNodeReputation(limit) &&
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
 		existEvent(eid) &&
 		!isEventSolved(eid) &&
-		canSolveEvent(eid) {
+		CanSolveEvent(eid, _from.Address) {
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, SolveEventGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
 		// Send transaction
-		solvedAt := uint64(time.Now().Unix())
-		_, err := _cinst.SolveEvent(auth, eid, solvedAt)
+		_, err := _cinst.SolveEvent(auth, eid)
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
 
-// About distributed registry
-func recordContainerOnReg(cinfo *types.ContainerInfo, startedAt uint64, cid string) {
+func RegisterApplication(ainfo *types.ApplicationInfo, cinfos []types.ContainerInfo, autodeploy bool) {
 
-	// Reputation limit for this function
-	limit := getActionLimit(RecordContainerAction)
+	// To simulate reputation
+	actions := []RepAction{{RegisterAppAction, 1}, {RegisterCtrAction, len(cinfos)}}
 
-	if hasNodeReputation(limit) {
+	// Checking zone
+	if hasEstimatedReputation(_from.Address, actions) {
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RecordContainerGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
+		// Encode info of each container
+		var ci []string
+		for i := range cinfos {
+			ci = append(ci, utils.MarshalJSON(cinfos[i]))
+		}
+
 		// Send transaction
-		_, err := _cinst.RecordContainer(auth, utils.MarshalJSON(cinfo), startedAt, cid)
+		_, err := _cinst.RegisterApplication(auth, utils.MarshalJSON(ainfo), ci, autodeploy)
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
 
-// About distributed registry
-func removeContainerFromReg(rcid uint64, finishedAt uint64) {
+func RegisterContainer(appid uint64, cinfo *types.ContainerInfo, autodeploy bool) {
 
-	// Reputation limit for this function
-	limit := getActionLimit(RemoveContainerAction)
+	limit := getActionLimit(RegisterCtrAction)
 
-	if hasNodeReputation(limit) &&
-		existRegContainer(rcid) &&
-		isRegContainerHost(rcid) &&
-		isRegContainerActive(rcid) {
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
+		existApplication(appid) &&
+		isApplicationOwner(appid, _from.Address) &&
+		!isApplicationUnregistered(appid) {
 
 		// Create and configure a transactor
 		_nmutex.Lock()
-		auth := eth.GetTransactor(_ks, _from, _nonce, _ethc, RemoveContainerGasLimit)
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
 		_nonce++ // Next nonce for the next transaction
 		_nmutex.Unlock()
 
 		// Send transaction
-		_, err := _cinst.RemoveContainer(auth, rcid, finishedAt)
+		_, err := _cinst.RegisterContainer(auth, appid, utils.MarshalJSON(cinfo), autodeploy)
+		utils.CheckError(err, utils.WarningMode)
+	}
+}
+
+func ActivateContainer(rcid uint64) {
+
+	limit := getActionLimit(ActivateCtrAction)
+	appid := GetContainer(rcid).Appid
+
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
+		existContainer(rcid) &&
+		isApplicationOwner(appid, _from.Address) &&
+		IsContainerHost(rcid, _from.Address) &&
+		!isContainerUnregistered(rcid) &&
+		!isContainerActive(rcid) {
+
+		// Create and configure a transactor
+		_nmutex.Lock()
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
+
+		// Send transaction
+		_, err := _cinst.ActivateContainer(auth, rcid)
+		utils.CheckError(err, utils.WarningMode)
+	}
+}
+
+func UpdateContainerInfo(rcid uint64, cinfo *types.ContainerInfo) {
+
+	limit := getActionLimit(UpdateCtrAction)
+	appid := GetContainer(rcid).Appid
+
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
+		existContainer(rcid) &&
+		isApplicationOwner(appid, _from.Address) &&
+		!isContainerUnregistered(rcid) {
+
+		// Create and configure a transactor
+		_nmutex.Lock()
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
+
+		// Send transaction
+		_, err := _cinst.UpdateContainerInfo(auth, rcid, utils.MarshalJSON(cinfo))
+		utils.CheckError(err, utils.WarningMode)
+	}
+}
+
+func UnregisterApplication(appid uint64) {
+
+	// To simulate reputation
+	count := len(getApplicationContainers(appid))
+	actions := []RepAction{{UnregisterAppAction, 1}, {UnregisterCtrAction, count}}
+
+	// Checking zone
+	if hasEstimatedReputation(_from.Address, actions) &&
+		existApplication(appid) &&
+		isApplicationOwner(appid, _from.Address) &&
+		!isApplicationUnregistered(appid) {
+
+		// Create and configure a transactor
+		_nmutex.Lock()
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
+
+		// Send transaction
+		_, err := _cinst.UnregisterApplication(auth, appid)
+		utils.CheckError(err, utils.WarningMode)
+	}
+}
+
+func UnregisterContainer(rcid uint64) {
+
+	limit := getActionLimit(UnregisterCtrAction)
+	appid := GetContainer(rcid).Appid
+
+	// Checking zone
+	if hasNodeReputation(_from.Address, limit) &&
+		existContainer(rcid) &&
+		isApplicationOwner(appid, _from.Address) &&
+		!isContainerUnregistered(rcid) {
+
+		// Create and configure a transactor
+		_nmutex.Lock()
+		auth := eth.GetTransactor(_ks, _from, _nonce, 5000000)
+		_nonce++ // Next nonce for the next transaction
+		_nmutex.Unlock()
+
+		// Send transaction
+		_, err := _cinst.UnregisterContainer(auth, rcid)
 		utils.CheckError(err, utils.WarningMode)
 	}
 }
@@ -234,9 +331,9 @@ func removeContainerFromReg(rcid uint64, finishedAt uint64) {
 /////////////
 // Getters //
 /////////////
-func getFaucetAddress() (faddr common.Address) {
+func getFaucetContract() (faddr common.Address) {
 
-	faddr, err := _cinst.Faucet(nil)
+	faddr, err := _cinst.Faucet(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.FatalMode)
 
 	return
@@ -244,75 +341,151 @@ func getFaucetAddress() (faddr common.Address) {
 
 func getNodeContract(addr common.Address) (naddr common.Address) {
 
-	naddr, err := _cinst.Nodes(nil, addr)
+	naddr, err := _cinst.Nodes(&bind.CallOpts{From: _from.Address}, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-func getActionLimit(action string) (rep int64) {
+func getClusterState() *types.ClusterState {
 
-	rep, err := _finst.GetActionLimit(nil, action)
+	state, err := _cinst.State(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	// Convert binding struct to native struct
+	s := types.ClusterState(state)
+
+	return &s
+}
+
+func getClusterConfig() *types.ClusterConfig {
+
+	config, err := _cinst.Config(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	// Convert binding struct to native struct
+	c := types.ClusterConfig(config)
+
+	return &c
+}
+
+func getActionLimit(action string) (limit int64) {
+
+	limit, err := _finst.GetActionLimit(&bind.CallOpts{From: _from.Address}, action)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-// Get node specs from its smart contract
-func GetSpecs(addr common.Address) *types.NodeSpecs {
+func getActionVariation(action string) (avar int64) {
+
+	avar, err := _finst.GetActionVariation(&bind.CallOpts{From: _from.Address}, action)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func GetNodeSpecs(addr common.Address) (specs string) {
 
 	ninst := nodeInstance(getNodeContract(addr))
-	ss, err := ninst.NodeSpecs(nil)
+	specs, err := ninst.GetSpecs(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.WarningMode)
 
-	// Decoding
-	var ns types.NodeSpecs
-	utils.UnmarshalJSON(ss, &ns)
-
-	return &ns
+	return
 }
 
-// Get network events from controller smart contract
-func GetEvent(eid uint64) *types.Event {
+func getNodeReputation(addr common.Address) (rep int64) {
 
-	ce, err := _cinst.Events(nil, eid)
+	ninst := nodeInstance(getNodeContract(addr))
+	rep, err := ninst.GetReputation(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.WarningMode)
 
-	// Convert contract event type
+	return
+}
+
+func GetEvent(eid uint64) *types.Event {
+
+	ce, err := _cinst.Events(&bind.CallOpts{From: _from.Address}, eid)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Convert binding struct to native struct
 	e := types.Event(ce)
 
 	return &e
 }
 
-// About distributed registry
-func getRegActiveContainers() (ctrs []uint64) {
+func GetEventReplies(eid uint64) (r []bindings.DELEventReply) {
 
-	ctrs, err := _cinst.GetActiveContainers(nil)
+	r, err := _cinst.GetEventReplies(&bind.CallOpts{From: _from.Address}, eid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-// About distributed registry
-func getRegContainer(rcid uint64) *types.Container {
+func GetApplication(appid uint64) *types.Application {
 
-	ctr, err := _cinst.Containers(nil, rcid)
+	app, err := _cinst.Apps(&bind.CallOpts{From: _from.Address}, appid)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Convert contract container type
+	// Convert binding struct to native struct
+	a := types.Application(app)
+
+	return &a
+}
+
+func GetContainer(rcid uint64) *types.Container {
+
+	ctr, err := _cinst.Ctrs(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Convert binding struct to native struct
 	c := types.Container(ctr)
 
 	return &c
 }
 
-// About distributed registry
-func GetContainerReg() map[uint64]*types.Container {
+func GetContainerInstances(rcid uint64) (insts []bindings.DCRContainerInstance) {
 
-	ac := getRegActiveContainers()
+	insts, err := _cinst.GetContainerInstances(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func getActiveApplications() map[uint64]*types.Application {
+
+	aa, err := _cinst.GetActiveApplications(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	apps := make(map[uint64]*types.Application)
+	for i := range aa {
+		apps[aa[i]] = GetApplication(aa[i])
+	}
+
+	return apps
+}
+
+func getApplicationContainers(appid uint64) map[uint64]*types.Container {
+
+	ac, err := _cinst.GetApplicationContainers(&bind.CallOpts{From: _from.Address}, appid)
+	utils.CheckError(err, utils.WarningMode)
 
 	ctrs := make(map[uint64]*types.Container)
 	for i := range ac {
-		ctrs[ac[i]] = getRegContainer(ac[i])
+		ctrs[ac[i]] = GetContainer(ac[i])
+	}
+
+	return ctrs
+}
+
+func GetActiveContainers() map[uint64]*types.Container {
+
+	ac, err := _cinst.GetActiveContainers(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	ctrs := make(map[uint64]*types.Container)
+	for i := range ac {
+		ctrs[ac[i]] = GetContainer(ac[i])
 	}
 
 	return ctrs
@@ -323,16 +496,62 @@ func GetContainerReg() map[uint64]*types.Container {
 /////////////
 func IsNodeRegistered(addr common.Address) (r bool) {
 
-	r, err := _cinst.IsNodeRegistered(nil, addr)
+	r, err := _cinst.IsNodeRegistered(&bind.CallOpts{From: _from.Address}, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-func hasNodeReputation(lrep int64) (r bool) {
+func hasNodeReputation(addr common.Address, lrep int64) (r bool) {
 
 	// Check if the node has enough reputation (greater or equal than a limit)
-	r, err := _cinst.HasNodeReputation(nil, _from.Address, lrep)
+	r, err := _cinst.HasNodeReputation(&bind.CallOpts{From: _from.Address}, addr, lrep)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func hasEstimatedReputation(addr common.Address, actions []RepAction) (r bool) {
+
+	// Initial node reputation
+	rep := getNodeReputation(addr)
+
+	for i := range actions {
+		limit := getActionLimit(actions[i].name)
+
+		// For each execution
+		for j := 0; j < actions[i].count; j++ {
+			if rep < limit {
+				return false
+			}
+
+			// Simulate next reputation
+			rep += getActionVariation(actions[i].name)
+		}
+	}
+
+	return true
+}
+
+func hasRequiredCount(thld uint8, count uint64) (r bool) {
+
+	r, err := _cinst.HasRequiredCount(&bind.CallOpts{From: _from.Address}, thld, count)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func isApplicationOwner(appid uint64, addr common.Address) (r bool) {
+
+	r, err := _cinst.IsApplicationOwner(&bind.CallOpts{From: _from.Address}, appid, addr)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func IsContainerHost(rcid uint64, addr common.Address) (r bool) {
+
+	r, err := _cinst.IsContainerHost(&bind.CallOpts{From: _from.Address}, rcid, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
@@ -340,15 +559,7 @@ func hasNodeReputation(lrep int64) (r bool) {
 
 func existEvent(eid uint64) (r bool) {
 
-	r, err := _cinst.ExistEvent(nil, eid)
-	utils.CheckError(err, utils.WarningMode)
-
-	return
-}
-
-func isEventSolved(eid uint64) (r bool) {
-
-	r, err := _cinst.IsEventSolved(nil, eid)
+	r, err := _cinst.ExistEvent(&bind.CallOpts{From: _from.Address}, eid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
@@ -356,50 +567,79 @@ func isEventSolved(eid uint64) (r bool) {
 
 func hasAlreadyReplied(eid uint64, addr common.Address) (r bool) {
 
-	r, err := _cinst.HasAlreadyReplied(nil, eid, addr)
+	r, err := _cinst.HasAlreadyReplied(&bind.CallOpts{From: _from.Address}, eid, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-func hasAlreadyVoted(eid uint64) (r bool) {
+func hasAlreadyVoted(eid uint64, addr common.Address) (r bool) {
 
-	r, err := _cinst.HasAlreadyVoted(nil, eid, _from.Address)
+	r, err := _cinst.HasAlreadyVoted(&bind.CallOpts{From: _from.Address}, eid, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-func canSolveEvent(eid uint64) (r bool) {
+func isEventSolved(eid uint64) (r bool) {
 
-	r, err := _cinst.CanSolveEvent(nil, eid, _from.Address)
+	r, err := _cinst.IsEventSolved(&bind.CallOpts{From: _from.Address}, eid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-// About distributed registry
-func existRegContainer(rcid uint64) (r bool) {
+func CanSolveEvent(eid uint64, addr common.Address) (r bool) {
 
-	r, err := _cinst.ExistContainer(nil, rcid)
+	r, err := _cinst.CanSolveEvent(&bind.CallOpts{From: _from.Address}, eid, addr)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-// About distributed registry
-func isRegContainerHost(rcid uint64) (r bool) {
+func existApplication(appid uint64) (r bool) {
 
-	r, err := _cinst.IsContainerHost(nil, _from.Address, rcid)
+	r, err := _cinst.ExistApplication(&bind.CallOpts{From: _from.Address}, appid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
 }
 
-// About distributed registry
-func isRegContainerActive(rcid uint64) (r bool) {
+func isApplicationUnregistered(appid uint64) (r bool) {
 
-	r, err := _cinst.IsContainerActive(nil, rcid)
+	r, err := _cinst.IsApplicationUnregistered(&bind.CallOpts{From: _from.Address}, appid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func existContainer(rcid uint64) (r bool) {
+
+	r, err := _cinst.ExistContainer(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func isContainerAutodeployed(rcid uint64) (r bool) {
+
+	r, err := _cinst.IsContainerAutodeployed(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func isContainerActive(rcid uint64) (r bool) {
+
+	r, err := _cinst.IsContainerActive(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func isContainerUnregistered(rcid uint64) (r bool) {
+
+	r, err := _cinst.IsContainerUnregistered(&bind.CallOpts{From: _from.Address}, rcid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return

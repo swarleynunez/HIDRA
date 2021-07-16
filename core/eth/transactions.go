@@ -1,11 +1,9 @@
 package eth
 
 import (
-	"context"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/swarleynunez/superfog/core/utils"
 	"math/big"
 	"os"
@@ -38,7 +36,7 @@ import (
 	utils.CheckError(err, utils.WarningMode)
 }*/
 
-func GetTransactor(ks *keystore.KeyStore, from accounts.Account, nonce uint64, ethc *ethclient.Client, gasLimit uint64) *bind.TransactOpts {
+func GetTransactor(ks *keystore.KeyStore, from accounts.Account, nonce, gasLimit uint64) *bind.TransactOpts {
 
 	// Get and parse chain ID (transaction replay protection)
 	chainId, err := strconv.ParseUint(os.Getenv("CHAIN_ID"), 10, 64)
@@ -50,11 +48,6 @@ func GetTransactor(ks *keystore.KeyStore, from accounts.Account, nonce uint64, e
 
 	// Set nonce
 	auth.Nonce = big.NewInt(int64(nonce))
-
-	// Set gas price
-	gasPrice, err := ethc.SuggestGasPrice(context.Background())
-	utils.CheckError(err, utils.WarningMode)
-	auth.GasPrice = gasPrice
 
 	// Set gas limit
 	auth.GasLimit = gasLimit

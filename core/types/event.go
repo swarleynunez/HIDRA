@@ -1,13 +1,16 @@
 package types
 
-import "github.com/ethereum/go-ethereum/common"
+import (
+	"github.com/ethereum/go-ethereum/common"
+	"math/big"
+)
 
-// Event tasks for run
-type Task uint8
+// Event tasks to execute locally
+type task uint8
 
 const (
 	// About web resources, storage... TODO: IPFS?
-	CreateTask Task = iota
+	CreateTask task = iota
 	ReadTask
 	UpdateTask
 	DeleteTask
@@ -18,30 +21,20 @@ const (
 
 	// About nodes
 	PingNodeTask
-	RequestResourcesTask // TODO: to update rules dynamically
+	RequestResourcesTask // TODO: Update rules dynamically?
 )
 
-// Network nodes events
+// DEL event model
 type Event struct {
-	DynType  string // Encoded dynamic event type
+	EType    string // Encoded event type (EventType struct)
 	Sender   common.Address
 	Solver   common.Address
-	SentAt   uint64 // Unix time
-	SolvedAt uint64 // Unix time
+	Rcid     uint64   // Optional, depending on the event type
+	SentAt   *big.Int // Unix time
+	SolvedAt *big.Int // Unix time
 }
 
-// Dynamic event types
-type EventType struct {	// TODO: delete
-	Spec Spec `json:"spec"` // Problematic spec
-	Task Task `json:"task"`
-	// TODO
-	Metadata map[string]interface{} `json:"meta"` // Realtime metadata (container id, suggestions to solver)
-}
-
-// Network nodes replies to an event
-type Reply struct {
-	Replier   common.Address
-	NodeState string // Encoded node state
-	Voters    []common.Address
-	RepliedAt uint64 // Unix time
+type EventType struct {
+	RequiredTask     task     `json:"task"` // Task to be executed locally by cluster nodes
+	TroubledResource resource `json:"res"`  // Resource used to choose an event solver
 }

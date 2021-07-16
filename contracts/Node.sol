@@ -1,34 +1,30 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.6.6;
 
+import "./DDR.sol";
+
 contract Node {
-    // Contract owner address (node)
-    address private owner;
+    // Contract owner address
+    address private addr;
 
-    // Controller smart contract address
-    address private controller;
+    // Object containing node data
+    DDR.NodeData private data;
 
-    // Node reputation
-    int64 private reputation;
-
-    // Node specifications
-    string public nodeSpecs;
-
-    // Constructor
-    constructor(address nodeAddr, string memory specs) public {
-        owner = nodeAddr;
-        controller = msg.sender;
-
-        // Reputation by default
-        reputation = 100;
-
-        // First specifications update
-        nodeSpecs = specs;
+    constructor(
+        address _addr,
+        string memory _specs,
+        int64 _reputation
+    ) public {
+        addr = _addr;
+        data.controller = msg.sender;
+        data.specs = _specs; // Node specifications
+        data.reputation = _reputation; // Reputation by default
+        data.registeredAt = block.timestamp;
     }
 
-    // Modifiers
     modifier onlyOwner() {
         require(
-            msg.sender == owner,
+            msg.sender == addr,
             "Only the contract owner can call this function"
         );
         _;
@@ -36,22 +32,31 @@ contract Node {
 
     modifier onlyController() {
         require(
-            msg.sender == controller,
+            msg.sender == data.controller,
             "Only the controller contract can call this function"
         );
         _;
     }
 
-    // Functions
-    function getReputation() public view returns (int64) {
-        return reputation;
-    }
-
-    function updateSpecs(string memory specs) public onlyOwner {
-        nodeSpecs = specs;
+    /////////////
+    // Setters //
+    /////////////
+    function updateSpecs(string memory _specs) public onlyOwner {
+        data.specs = _specs;
     }
 
     function setVariation(int64 variation) public onlyController {
-        reputation += variation;
+        data.reputation += variation;
+    }
+
+    /////////////
+    // Getters //
+    /////////////
+    function getSpecs() public view returns (string memory) {
+        return data.specs;
+    }
+
+    function getReputation() public view returns (int64) {
+        return data.reputation;
     }
 }

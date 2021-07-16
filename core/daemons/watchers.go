@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// DEL
+// DEL (debug: all cluster nodes)
 func WatchNewEvent() {
 
 	// Controller smart contract instance
@@ -30,17 +30,21 @@ func WatchNewEvent() {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.EventId] {
-				ecache[log.EventId] = true
+			if !log.Raw.Removed && !ecache[log.Eid] {
+				ecache[log.Eid] = true
 
 				// Debug
-				event := managers.GetEvent(log.EventId)
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.EventId, ", Sender=", event.Sender.String(), ", DynType=", event.DynType, ")\n")
+				event := managers.GetEvent(log.Eid)
+				if event.Rcid > 0 {
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
+
+				} else {
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
+				}
 
 				// Send a event reply containing the current node state
-				go managers.SendReply(log.EventId, managers.GetNodeState())
+				go managers.SendReply(log.Eid, managers.GetState())
 			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
@@ -48,6 +52,7 @@ func WatchNewEvent() {
 	}
 }
 
+// DEL (debug: all cluster nodes)
 func WatchRequiredReplies() {
 
 	// Controller smart contract instance
@@ -67,18 +72,17 @@ func WatchRequiredReplies() {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.EventId] {
-				ecache[log.EventId] = true
+			if !log.Raw.Removed && !ecache[log.Eid] {
+				ecache[log.Eid] = true
 
 				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredReplies (EID=", log.EventId, ")\n")
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
 
-				// Select and vote the best event solver
-				solver := selectBestSolver(log.EventId, cinst)
+				// Select and vote an event solver
+				solver := selectSolver(log.Eid)
 				if !utils.EmptyEthAddress(solver.String()) {
-					go managers.VoteSolver(log.EventId, solver)
+					go managers.VoteSolver(log.Eid, solver)
 				}
 			}
 		case err := <-sub.Err():
@@ -87,6 +91,7 @@ func WatchRequiredReplies() {
 	}
 }
 
+// DEL (debug: only solver nodes)
 func WatchRequiredVotes(ctx context.Context) {
 
 	// Controller smart contract instance
@@ -106,33 +111,24 @@ func WatchRequiredVotes(ctx context.Context) {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.EventId] {
-				ecache[log.EventId] = true
-
-				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.EventId, ", Solver=", log.Solver.String(), ")\n")
-
-				// Node account
-				from := managers.GetFromAccount()
+			if !log.Raw.Removed && !ecache[log.Eid] {
+				ecache[log.Eid] = true
 
 				// Am I the voted solver?
-				if log.Solver == from.Address {
-					// Get related event header
-					event := managers.GetEvent(log.EventId)
+				event := managers.GetEvent(log.Eid)
+				from := managers.GetFromAccount()
+				if event.Solver == from {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.Eid, ")\n")
 
-					// TODO. Am I the event sender?
-					if event.Sender != from.Address {
-						// Decode dynamic event type
-						var etype types.EventType
-						utils.UnmarshalJSON(event.DynType, &etype)
-
-						// Execute required task (from dynamic event type)
-						go managers.RunEventTask(ctx, etype, log.EventId)
+					// Am I the event sender?
+					if event.Sender != from {
+						// Execute required event task (depends on the event type)
+						go managers.RunEventTask(ctx, event, log.Eid)
 					} else {
-						// Solve related event
-						go managers.SolveEvent(log.EventId)
+						// Execute required local task (depends on the event type)
+						go managers.RunTask(ctx, event, log.Eid)
 					}
 				}
 			}
@@ -142,6 +138,7 @@ func WatchRequiredVotes(ctx context.Context) {
 	}
 }
 
+// DEL (debug only sender nodes)
 func WatchEventSolved(ctx context.Context) {
 
 	// Controller smart contract instance
@@ -161,28 +158,21 @@ func WatchEventSolved(ctx context.Context) {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.EventId] {
-				ecache[log.EventId] = true
+			if !log.Raw.Removed && !ecache[log.Eid] {
+				ecache[log.Eid] = true
 
-				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.EventId, ")\n")
-
-				// Get related event header
-				event := managers.GetEvent(log.EventId)
-
-				// Node account
+				// Am I the event sender and not the event solver?
+				event := managers.GetEvent(log.Eid)
 				from := managers.GetFromAccount()
+				if event.Sender == from {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.Eid, ")\n")
 
-				// TODO. Am I the event sender and the event solver?
-				if event.Sender == from.Address && event.Solver != from.Address {
-					// Decode dynamic event type
-					var etype types.EventType
-					utils.UnmarshalJSON(event.DynType, &etype)
-
-					// Any completion tasks?
-					go managers.RunEventEndingTask(ctx, etype)
+					if event.Solver != from {
+						// Execute required ending task (depends on the event type)
+						go managers.RunEventEndingTask(ctx, event)
+					}
 				}
 			}
 		case err := <-sub.Err():
@@ -191,17 +181,17 @@ func WatchEventSolved(ctx context.Context) {
 	}
 }
 
-// DCR
-func WatchNewContainer(ctx context.Context) {
+// DCR (debug only owner nodes)
+func WatchContainerRegistered(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
 	// Event/log channel
-	logs := make(chan *bindings.ControllerNewContainer)
+	logs := make(chan *bindings.ControllerContainerRegistered)
 
 	// Subscription to the event
-	sub, err := cinst.WatchNewContainer(nil, logs)
+	sub, err := cinst.WatchContainerRegistered(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Cache to avoid duplicate event logs
@@ -211,21 +201,88 @@ func WatchNewContainer(ctx context.Context) {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.RegistryCtrId] {
-				ecache[log.RegistryCtrId] = true
+			if !log.Raw.Removed && !ecache[log.Rcid] {
+				ecache[log.Rcid] = true
 
-				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewContainer (RCID=", log.RegistryCtrId, ", CID=", log.CtrId, ", Host=", log.Host.String(), ")\n")
-
-				// Node account
+				// Am I the container owner?
+				ctr := managers.GetContainer(log.Rcid)
+				owner := managers.GetApplication(ctr.Appid).Owner
 				from := managers.GetFromAccount()
+				if owner == from {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerRegistered (RCID=", log.Rcid, ", APPID=", ctr.Appid, ")\n")
+
+					// Am I the container host?
+					if managers.IsContainerHost(log.Rcid, from) {
+						// Decode container info
+						var cinfo types.ContainerInfo
+						utils.UnmarshalJSON(ctr.Info, &cinfo)
+
+						// Autodeploy mode (anonymous function)
+						go func() {
+							managers.NewContainer(ctx, &cinfo, managers.GetContainerName(log.Rcid))
+							managers.ActivateContainer(log.Rcid)
+						}()
+					} else {
+						// Encapsulate event type
+						etype := types.EventType{
+							RequiredTask:     types.NewContainerTask,
+							TroubledResource: types.AllResources,
+						}
+
+						go managers.SendEvent(&etype, log.Rcid, managers.GetState())
+					}
+				}
+			}
+		case err := <-sub.Err():
+			utils.CheckError(err, utils.WarningMode)
+		}
+	}
+}
+
+// DCR (debug only host nodes)
+func WatchContainerUpdated(ctx context.Context) {
+
+	// Controller smart contract instance
+	cinst := managers.GetControllerInst()
+
+	// Event/log channel
+	logs := make(chan *bindings.ControllerContainerUpdated)
+
+	// Subscription to the event
+	sub, err := cinst.WatchContainerUpdated(nil, logs)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Cache to avoid duplicate event logs
+	ecache := map[uint64]bool{}
+
+	// Infinite loop
+	for {
+		select {
+		case log := <-logs:
+			// Check if an event log has already been received
+			if !log.Raw.Removed && !ecache[log.Rcid] {
+				ecache[log.Rcid] = true
 
 				// Am I the container host?
-				if log.Host == from.Address {
-					// Set registry container ID to the local container
-					go managers.SetContainerName(ctx, log.CtrId, managers.GetContainerName(log.RegistryCtrId))
+				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
+
+					// Get and decode container info
+					ctr := managers.GetContainer(log.Rcid)
+					var cinfo types.ContainerInfo
+					utils.UnmarshalJSON(ctr.Info, &cinfo)
+
+					// TODO: think about which containers fields could be updated by the owner and how
+					go func() { // Anonymous function
+						managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
+						managers.NewContainer(ctx, &cinfo, managers.GetContainerName(log.Rcid))
+					}()
+				} else {
+					// Clean container old instances (if exists)
+					go managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
 				}
 			}
 		case err := <-sub.Err():
@@ -234,16 +291,17 @@ func WatchNewContainer(ctx context.Context) {
 	}
 }
 
-func WatchContainerRemoved() {
+// DCR (debug only host nodes)
+func WatchContainerUnregistered(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
 	// Event/log channel
-	logs := make(chan *bindings.ControllerContainerRemoved)
+	logs := make(chan *bindings.ControllerContainerUnregistered)
 
 	// Subscription to the event
-	sub, err := cinst.WatchContainerRemoved(nil, logs)
+	sub, err := cinst.WatchContainerUnregistered(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Cache to avoid duplicate event logs
@@ -253,13 +311,18 @@ func WatchContainerRemoved() {
 	for {
 		select {
 		case log := <-logs:
-
 			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.RegistryCtrId] {
-				ecache[log.RegistryCtrId] = true
+			if !log.Raw.Removed && !ecache[log.Rcid] {
+				ecache[log.Rcid] = true
 
-				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerRemoved (RCID=", log.RegistryCtrId, ")\n")
+				// Am I the container host?
+				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
+				}
+
+				// Clean all container instances (in execution or old instances)
+				go managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
 			}
 		case err := <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)

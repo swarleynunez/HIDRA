@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	cnameTemplate = "registry_ctr_"
+	cnameTemplate = "hidra.io_rcid-"
 )
 
 ////////////
@@ -30,7 +30,7 @@ func existImageLocally(ctx context.Context, imgTag string) bool {
 	utils.CheckError(err, utils.WarningMode)
 
 	// Get all local images
-	images, err := _dcli.ImageList(ctx, dockertypes.ImageListOptions{All: true})
+	images, err := _docc.ImageList(ctx, dockertypes.ImageListOptions{All: true})
 	utils.CheckError(err, utils.WarningMode)
 
 	// Search image by tag
@@ -47,17 +47,25 @@ func existImageLocally(ctx context.Context, imgTag string) bool {
 
 func pullImage(ctx context.Context, imgTag string) {
 
-	fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Downloading '"+imgTag+"' image...")
-	out, err := _dcli.ImagePull(ctx, imgTag, dockertypes.ImagePullOptions{})
+	// Debug
+	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Downloading '"+imgTag+"' image...\n")
+
+	out, err := _docc.ImagePull(ctx, imgTag, dockertypes.ImagePullOptions{})
 	utils.CheckError(err, utils.WarningMode)
 	_, err = io.Copy(ioutil.Discard, out) // Discard output to /dev/null
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func pruneImages(ctx context.Context) {
+
+	_, err := _docc.ImagesPrune(ctx, filters.Args{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
 ////////////////
 // Containers //
 ////////////////
-func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) string {
+func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) {
 
 	// Check and format image tag
 	imgTag, err := utils.FormatImageTag(cinfo.ImageTag)
@@ -69,7 +77,7 @@ func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cnam
 
 	ports := checkNodePorts(ctx, cinfo.Ports)
 
-	// Set configs
+	// Set container configs
 	ctrConfig := &container.Config{Image: imgTag}
 	hostConfig := &container.HostConfig{
 		Binds:        cinfo.Volumes,
@@ -81,55 +89,57 @@ func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cnam
 	}
 	netConfig := &network.NetworkingConfig{}
 
-	resp, err := _dcli.ContainerCreate(ctx, ctrConfig, hostConfig, netConfig, nil, cname)
+	_, err = _docc.ContainerCreate(ctx, ctrConfig, hostConfig, netConfig, nil, cname)
 	utils.CheckError(err, utils.WarningMode)
-
-	return resp.ID
 }
 
-func startDockerContainer(ctx context.Context, ctrNameId string) { // ctrNameId = id or name
+func startDockerContainer(ctx context.Context, cname string) {
 
-	err := _dcli.ContainerStart(ctx, ctrNameId, dockertypes.ContainerStartOptions{})
+	err := _docc.ContainerStart(ctx, cname, dockertypes.ContainerStartOptions{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
 func restartDockerContainer(ctx context.Context, cname string) {
 
 	// Stop and start container
-	err := _dcli.ContainerRestart(ctx, cname, nil) // nil = do not wait to start container
+	err := _docc.ContainerRestart(ctx, cname, nil) // nil = do not wait to start container
 	utils.CheckError(err, utils.WarningMode)
 }
 
 func stopDockerContainer(ctx context.Context, cname string) {
 
 	// SIGTERM instead of SIGKILL
-	err := _dcli.ContainerStop(ctx, cname, nil) // nil = engine default timeout
+	err := _docc.ContainerStop(ctx, cname, nil) // nil = engine default timeout
 	utils.CheckError(err, utils.WarningMode)
 }
 
 func removeDockerContainer(ctx context.Context, cname string) {
 
-	// TODO. Forcing the container remove
-	err := _dcli.ContainerRemove(ctx, cname, dockertypes.ContainerRemoveOptions{Force: true})
+	err := _docc.ContainerRemove(ctx, cname, dockertypes.ContainerRemoveOptions{})
 	utils.CheckError(err, utils.WarningMode)
-
-	// TODO. Remove unused volumes
-	//pruneVolumes(ctx)
 }
 
+/*func BackupContainer() {
+
+	// TODO. Backup tasks. Improve flow
+	// commit --> create an image from a container (snapshot preserving rw)
+	// save, load --> compress and uncompress images (tar or stdin/stdout)
+	// volumes --> manual backup or using --volumes-from (temporal container)
+}*/
+
 // all: only running containers (false) or all containers (true)
-func SearchDockerContainers(ctx context.Context, key, value string, all bool) *[]dockertypes.Container {
+func SearchDockerContainers(ctx context.Context, key, value string, all bool) []dockertypes.Container {
 
 	filter := filters.Args{}
 	if key != "" && value != "" {
 		filter = filters.NewArgs(filters.KeyValuePair{Key: key, Value: value})
 	}
 
-	ctr, err := _dcli.ContainerList(ctx, dockertypes.ContainerListOptions{Size: true, All: all, Filters: filter})
+	ctrs, err := _docc.ContainerList(ctx, dockertypes.ContainerListOptions{Size: true, All: all, Filters: filter})
 	utils.CheckError(err, utils.WarningMode)
 
-	if len(ctr) > 0 {
-		return &ctr
+	if len(ctrs) > 0 {
+		return ctrs
 	} else {
 		return nil
 	}
@@ -140,19 +150,13 @@ func SearchDockerContainers(ctx context.Context, key, value string, all bool) *[
 /////////////
 func pruneVolumes(ctx context.Context) {
 
-	_, err := _dcli.VolumesPrune(ctx, filters.Args{})
+	_, err := _docc.VolumesPrune(ctx, filters.Args{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
 /////////////
 // Helpers //
 /////////////
-func SetContainerName(ctx context.Context, cid, cname string) {
-
-	err := _dcli.ContainerRename(ctx, cid, cname)
-	utils.CheckError(err, utils.WarningMode)
-}
-
 // Format cname from a rcid
 func GetContainerName(rcid uint64) string {
 	return cnameTemplate + strconv.FormatUint(rcid, 10)
@@ -170,25 +174,12 @@ func getRegContainerId(cname string) uint64 {
 	return rcid
 }
 
-func getContainerStartTime(ctx context.Context, cid string) uint64 {
-
-	// Get container
-	ctr, err := _dcli.ContainerInspect(ctx, cid)
-	utils.CheckError(err, utils.WarningMode)
-
-	// Get start unix time
-	stime, err := time.Parse(time.RFC3339, ctr.State.StartedAt)
-	utils.CheckError(err, utils.WarningMode)
-
-	return uint64(stime.Unix())
-}
-
 // Check if a port is already allocated by docker
 func isPortAllocatedByDocker(ctx context.Context, port string) bool {
 
 	ctrs := SearchDockerContainers(ctx, "", "", true)
 	if ctrs != nil {
-		for _, ctr := range *ctrs {
+		for _, ctr := range ctrs {
 			for _, p := range ctr.Ports {
 				strp := strconv.FormatUint(uint64(p.PublicPort), 10)
 

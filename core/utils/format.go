@@ -71,11 +71,11 @@ func ValidEthAddress(addr string) bool {
 	return re.MatchString(addr)
 }
 
-func CompareValues(value interface{}, comp types.Comparator, bound interface{}) (r bool, err error) {
+func CompareValues(value interface{}, comp types.RuleComparator, limit interface{}) (r bool, err error) {
 
 	// Uint64 assertion
 	if v, ok := value.(uint64); ok {
-		if b, ok := bound.(uint64); ok {
+		if b, ok := limit.(uint64); ok {
 			switch comp {
 			case types.EqualComp:
 				r = v == b
@@ -101,7 +101,7 @@ func CompareValues(value interface{}, comp types.Comparator, bound interface{}) 
 
 	// Float64 assertion
 	if v, ok := value.(float64); ok {
-		if b, ok := bound.(float64); ok {
+		if b, ok := limit.(float64); ok {
 			switch comp {
 			case types.EqualComp:
 				r = v == b
@@ -127,7 +127,7 @@ func CompareValues(value interface{}, comp types.Comparator, bound interface{}) 
 
 	// String assertion
 	if v, ok := value.(string); ok {
-		if b, ok := bound.(string); ok {
+		if b, ok := limit.(string); ok {
 			switch comp {
 			case types.EqualComp:
 				r = v == b

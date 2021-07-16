@@ -9,26 +9,23 @@ import (
 	"time"
 )
 
-// Hysteresis cycles
-type cycleCounter struct {
+// Rule cycle counter (rcc)
+type cycle struct {
 	measures uint64
 	triggers uint64
 }
 
-// Hysteresis cycles by rule name
-type cycles map[string]cycleCounter
-
 func Run(ctx context.Context) {
 
-	// Node rule cycles
-	cycles := cycles{}
+	// Rule cycle counters by rule name
+	rccs := map[string]cycle{}
 
 	// Get and parse monitor time interval
-	mInter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
+	minter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
 	utils.CheckError(err, utils.FatalMode)
 
 	// Get and parse cycle time
-	cTime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
+	ctime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
 	utils.CheckError(err, utils.FatalMode)
 
 	// Cache to avoid sending duplicate events
@@ -39,17 +36,18 @@ func Run(ctx context.Context) {
 	go WatchRequiredReplies()
 	go WatchRequiredVotes(ctx)
 	go WatchEventSolved(ctx)
-	go WatchNewContainer(ctx)
-	go WatchContainerRemoved()
+	go WatchContainerRegistered(ctx)
+	go WatchContainerUpdated(ctx)
+	go WatchContainerUnregistered(ctx)
 
-	// Recover host container state from distributed registry
-	managers.InitContainerState(ctx)
+	// Recover node state from distributed registry
+	managers.InitNodeState(ctx)
 
 	// Main loop
 	for {
-		time.Sleep(time.Duration(mInter) * time.Millisecond)
+		time.Sleep(time.Duration(minter) * time.Millisecond)
 
 		// Check all state rules
-		checkStateRules(ctx, cycles, mInter, cTime, ecache)
+		checkStateRules(ctx, rccs, minter, ctime, ecache)
 	}
 }

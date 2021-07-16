@@ -10,6 +10,6 @@ var versionCmd = &cobra.Command{
 	Short:                 "Show version information",
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("HIDRA v0.1.0")
+		fmt.Println("HIDRA 1.0.0")
 	},
 }

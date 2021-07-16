@@ -10,6 +10,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/disk"
@@ -21,9 +22,7 @@ import (
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
-	"github.com/swarleynunez/superfog/inputs"
 	"math"
-	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -32,32 +31,32 @@ import (
 )
 
 const (
-	// Gas limit of each smart contract function
-	DeployControllerGasLimit uint64 = 3600000
+	// Gas limit for each smart contract function
+	/*DeployControllerGasLimit uint64 = 3600000
 	RegisterNodeGasLimit     uint64 = 530000
 	SendEventGasLimit        uint64 = 340000
 	SendReplyGasLimit        uint64 = 230000
 	VoteSolverGasLimit       uint64 = 180000
 	SolveEventGasLimit       uint64 = 110000
 	RecordContainerGasLimit  uint64 = 370000
-	RemoveContainerGasLimit  uint64 = 150000
+	RemoveContainerGasLimit  uint64 = 150000*/
 
 	// Reputable actions
-	SendEventAction       = "sendEvent"
-	SendReplyAction       = "sendReply"
-	VoteSolverAction      = "voteSolver"
-	SolveEventAction      = "solveEvent"
-	RecordContainerAction = "recordContainer"
-	RemoveContainerAction = "removeContainer"
-
-	// Others
-	blueMsgFormat = "\033[1;34m[%s] %s \033[0m\n"
+	SendEventAction     = "sendEvent"
+	SendReplyAction     = "sendReply"
+	VoteSolverAction    = "voteSolver"
+	SolveEventAction    = "solveEvent"
+	RegisterAppAction   = "registerApp"
+	RegisterCtrAction   = "registerCtr"
+	ActivateCtrAction   = "activateCtr"
+	UpdateCtrAction     = "updateCtr"
+	UnregisterAppAction = "unregisterApp"
+	UnregisterCtrAction = "unregisterCtr"
 )
 
 var (
 	// Unexported and "readonly" global parameters
 	_ethc   *ethclient.Client
-	_dcli   *client.Client
 	_ks     *keystore.KeyStore
 	_from   accounts.Account
 	_nonce  uint64
@@ -65,9 +64,11 @@ var (
 	_pmutex *sync.Mutex
 	_cinst  *bindings.Controller
 	_finst  *bindings.Faucet
+	_docc   *client.Client
+	_onosc  *types.ONOSClient
 
 	// Errors
-	errUnknownTask = errors.New("unknown task")
+	errUnknownTask = errors.New("unknown event task")
 )
 
 type networks map[string]dockertypes.NetworkStats
@@ -86,11 +87,8 @@ func InitNode(ctx context.Context, deploying bool) {
 		pass    = os.Getenv("NODE_PASS")
 	)
 
-	// Connect to the Ethereum node
+	// Connect to the Ethereum local node
 	_ethc = eth.Connect(utils.FormatPath(nodeDir, "geth.ipc"))
-
-	// Connect to the Docker node
-	_dcli = docker.Connect(ctx)
 
 	// Load Ethereum keystore
 	keypath := utils.FormatPath(nodeDir, "keystore")
@@ -98,6 +96,9 @@ func InitNode(ctx context.Context, deploying bool) {
 
 	// Load and unlock an Ethereum account
 	_from = eth.LoadAccount(_ks, addr, pass)
+
+	// Debug
+	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded account: "+_from.Address.String(), "\n")
 
 	// Get loaded Ethereum account nonce
 	nonce, err := _ethc.PendingNonceAt(context.Background(), _from.Address)
@@ -110,53 +111,40 @@ func InitNode(ctx context.Context, deploying bool) {
 	// Get smart contracts instances
 	if !deploying {
 		_cinst = controllerInstance()
-		_finst = faucetInstance(getFaucetAddress())
+		_finst = faucetInstance(getFaucetContract())
+
+		// Debug
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", os.Getenv("CONTROLLER_ADDR"), "\n")
 	}
+
+	// Connect to the Docker local node
+	_docc = docker.Connect(ctx)
+
+	// Connect to a cluster ONOS controller
+	//_onosc = onos.Connect()
 }
 
-func InitContainerState(ctx context.Context) {
-
-	// TODO. Testing
-	rand.Seed(time.Now().Unix())
-	cinfo := inputs.Containers[rand.Intn(len(inputs.Containers))]
-	NewContainer(ctx, &cinfo)
-
-	//UpdateContainerState(ctx)
-}
-
-// TODO
-func UpdateContainerState(ctx context.Context) {
+func InitNodeState(ctx context.Context) {
 
 	// Get distributed registry active containers
-	ctrs := GetContainerReg()
-	for key := range ctrs {
+	ctrs := GetActiveContainers()
+	for rcid := range ctrs {
 		// Am I the host?
-		if ctrs[key].Host == _from.Address {
-			cname := GetContainerName(key)
-			newRegCtr := false
+		if IsContainerHost(rcid, _from.Address) {
+			cname := GetContainerName(rcid)
 
 			// Does the container exist locally?
-			ctr := SearchDockerContainers(ctx, "name", cname, true)
-			if ctr == nil {
+			c := SearchDockerContainers(ctx, "name", cname, true)
+			if c == nil {
 				// Decode container info
 				var cinfo types.ContainerInfo
-				utils.UnmarshalJSON(ctrs[key].Info, &cinfo)
+				utils.UnmarshalJSON(ctrs[rcid].Info, &cinfo)
 
-				// Avoid container renaming searching by cid
-				ctr := SearchDockerContainers(ctx, "id", cinfo.Id, true)
-				if ctr == nil {
-					RemoveContainer(cname)
-					NewContainer(ctx, &cinfo)
-					newRegCtr = true
-				} else {
-					SetContainerName(ctx, cinfo.Id, cname)
-				}
-			}
-
-			// Is the container running?
-			if !newRegCtr {
-				ctr = SearchDockerContainers(ctx, "name", cname, false)
-				if ctr == nil {
+				go NewContainer(ctx, &cinfo, cname)
+			} else {
+				// Is the container running?
+				c = SearchDockerContainers(ctx, "name", cname, false)
+				if c == nil {
 					startDockerContainer(ctx, cname)
 				}
 			}
@@ -167,18 +155,15 @@ func UpdateContainerState(ctx context.Context) {
 /////////////
 // Getters //
 /////////////
-func GetFromAccount() accounts.Account {
-	return _from
+func GetFromAccount() common.Address {
+	return _from.Address
 }
 
 func GetControllerInst() *bindings.Controller {
 	return _cinst
 }
 
-///////////
-// Specs //
-///////////
-func GetNodeSpecs() *types.NodeSpecs {
+func GetSpecs() *types.NodeSpecs {
 
 	hi, err := host.Info()
 	utils.CheckError(err, utils.WarningMode)
@@ -196,19 +181,17 @@ func GetNodeSpecs() *types.NodeSpecs {
 	utils.CheckError(err, utils.WarningMode)
 
 	return &types.NodeSpecs{
-		Arch:       hi.KernelArch,
-		Cores:      uint64(cores),
-		CpuMhz:     ci[0].Mhz,
-		MemTotal:   vm.Total,
-		DiskTotal:  du.Total,
-		FileSystem: du.Fstype,
-		Os:         hi.OS,
-		Hostname:   hi.Hostname,
-		BootTime:   hi.BootTime,
+		Arch:      hi.KernelArch,
+		Cores:     uint64(cores),
+		CpuMhz:    ci[0].Mhz,
+		MemTotal:  vm.Total,
+		DiskTotal: du.Total,
+		OS:        hi.OS,
+		IP:        getNodeIP(),
 	}
 }
 
-func GetNodeState() *types.State {
+func GetState() *types.State {
 
 	cp, err := cpu.Percent(0, false) // Total CPU usage (all cores)
 	utils.CheckError(err, utils.WarningMode)
@@ -233,7 +216,7 @@ func GetNodeState() *types.State {
 	}
 
 	// Sort disks by name (disk0, disk1)
-	sort.Slice(disks, func(i, j int) bool {
+	sort.Slice(disks, func(i, j int{
 		return disks[i].Name < disks[j].Name
 	})
 
@@ -262,52 +245,24 @@ func GetNodeState() *types.State {
 	}*/
 
 	return &types.State{
-		CpuPercent: cp[0],
-		MemUsage:   vm.Used,
-		DiskUsage:  du.Used,
+		CpuUsage:  cp[0],
+		MemUsage:  vm.Used,
+		DiskUsage: du.Used,
 		//Disks:          disks,
 		//Processes:      proc,
 		NetPacketsSent: nio[0].PacketsSent,
-		//NetBytesSent:   nio[0].BytesSent,
 		NetPacketsRecv: nio[0].PacketsRecv,
+		//NetBytesSent:   nio[0].BytesSent,
 		//NetBytesRecv:   nio[0].BytesRecv,
 		//NetInterfaces:  inets,
 		//NetConnections: conns,
 	}
 }
 
-// In order to record a container in the distributed registry
-func getContainerInfo(ctx context.Context, ctrNameId string) *types.ContainerInfo { // ctrNameId = id or name
-
-	// Container info
-	ctr, err := _dcli.ContainerInspect(ctx, ctrNameId)
-	utils.CheckError(err, utils.WarningMode)
-
-	// Container image info
-	img, _, err := _dcli.ImageInspectWithRaw(ctx, ctr.Image)
-	utils.CheckError(err, utils.WarningMode)
-
-	return &types.ContainerInfo{
-		Id:        ctr.ID,
-		ImageTag:  ctr.Config.Image,
-		ImageArch: img.Architecture,
-		ImageOs:   img.Os,
-		ImageSize: uint64(img.VirtualSize),
-		ContainerSetup: types.ContainerSetup{
-			ContainerConfig: types.ContainerConfig{
-				CPULimit: uint64(ctr.HostConfig.NanoCPUs),
-				MemLimit: uint64(ctr.HostConfig.Memory),
-				Volumes:  ctr.HostConfig.Binds,
-				Ports:    ctr.HostConfig.PortBindings,
-			},
-		},
-	}
-}
-
 func getContainerState(ctx context.Context, cname string) *types.State {
 
 	// Get current stats
-	cs, err := _dcli.ContainerStatsOneShot(ctx, cname)
+	cs, err := _docc.ContainerStatsOneShot(ctx, cname)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Decode stats
@@ -315,17 +270,16 @@ func getContainerState(ctx context.Context, cname string) *types.State {
 	err = json.NewDecoder(cs.Body).Decode(&stats)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Container summary (only if the container is running)
+	// TODO. Container summary (only if the container is running)
 	ctr := SearchDockerContainers(ctx, "name", cname, false)
 
 	// Group all NICs
 	ns := groupNetworkStats(stats.Networks)
 
 	return &types.State{
-		CpuPercent: calculateCpuPercent(&stats.CPUStats, &stats.PreCPUStats),
-		MemUsage:   stats.MemoryStats.Usage,
-		// Get disk usage (rw size and volumes size)
-		DiskUsage:      uint64((*ctr)[0].SizeRw) + getVolumesSize(ctx, &(*ctr)[0].Mounts),
+		CpuUsage:       calculateCpuPercent(&stats.CPUStats, &stats.PreCPUStats),
+		MemUsage:       stats.MemoryStats.Usage,
+		DiskUsage:      uint64(ctr[0].SizeRw) + getVolumesSize(ctx, ctr[0].Mounts), // Get disk usage (rw size and volumes size)
 		NetPacketsSent: ns.TxPackets,
 		NetPacketsRecv: ns.RxPackets,
 	}
@@ -334,69 +288,85 @@ func getContainerState(ctx context.Context, cname string) *types.State {
 //////////////
 // Handling //
 //////////////
-/*func RunTask(ctx context.Context, task types.Task, cname string) {
+// Tasks to execute when the sender and the solver are the same node
+func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 
-	fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Running local task (RCID="+strconv.FormatUint(getRegContainerId(cname), 10)+")")
+	// Decode event type
+	var etype types.EventType
+	utils.UnmarshalJSON(event.EType, &etype)
 
-	switch task {
+	switch etype.RequiredTask {
 	case types.NewContainerTask:
-	case types.RestartContainerTask:
-		// Run task
-		RestartContainer(ctx, cname)
-	case types.StopContainerTask:
+		if event.Rcid > 0 {
+			// Get container linked to the event
+			ctr := GetContainer(event.Rcid)
+
+			// Decode container info
+			var cinfo types.ContainerInfo
+			utils.UnmarshalJSON(ctr.Info, &cinfo)
+
+			// Run task
+			NewContainer(ctx, &cinfo, GetContainerName(event.Rcid))
+		}
 	case types.MigrateContainerTask:
-	case types.DeleteContainerTask:
-	default:
-		utils.CheckError(errUnknownTask, utils.WarningMode)
-		return
-	}
-}*/
+		if event.Rcid > 0 {
+			// Run task
+			RestartContainer(ctx, GetContainerName(event.Rcid))
 
-func RunEventTask(ctx context.Context, etype types.EventType, eventId uint64) {
-
-	// TODO. Ask for the event sender
-	switch etype.Task {
-	case types.NewContainerTask:
-	case types.RestartContainerTask:
-	case types.MigrateContainerTask:
-		// Get related event metadata
-		rcid := etype.Metadata["rcid"].(float64) // TODO
-
-		ctr := getRegContainer(uint64(rcid))
-
-		// Decode container info
-		var cinfo types.ContainerInfo
-		utils.UnmarshalJSON(ctr.Info, &cinfo)
-
-		// Run task
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Executing event task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
-		NewContainer(ctx, &cinfo)
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Event task executed (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
-	case types.DeleteContainerTask:
+			// TODO: other tasks to balance the cluster?
+		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
 		return
 	}
 
 	// Solve related event
-	SolveEvent(eventId)
+	SolveEvent(eid)
 }
 
-func RunEventEndingTask(ctx context.Context, etype types.EventType) {
+// Tasks to execute when the cluster selects a solver
+func RunEventTask(ctx context.Context, event *types.Event, eid uint64) {
 
-	switch etype.Task {
+	// Decode event type
+	var etype types.EventType
+	utils.UnmarshalJSON(event.EType, &etype)
+
+	switch etype.RequiredTask {
+	case types.NewContainerTask, types.MigrateContainerTask:
+		if event.Rcid > 0 {
+			// Get container linked to the event
+			ctr := GetContainer(event.Rcid)
+
+			// Decode container info
+			var cinfo types.ContainerInfo
+			utils.UnmarshalJSON(ctr.Info, &cinfo)
+
+			// Run event task
+			NewContainer(ctx, &cinfo, GetContainerName(event.Rcid))
+		}
+	default:
+		utils.CheckError(errUnknownTask, utils.WarningMode)
+		return
+	}
+
+	// Solve related event
+	SolveEvent(eid)
+}
+
+// Tasks to execute when the cluster solve an event
+func RunEventEndingTask(ctx context.Context, event *types.Event) {
+
+	// Decode event type
+	var etype types.EventType
+	utils.UnmarshalJSON(event.EType, &etype)
+
+	switch etype.RequiredTask {
 	case types.NewContainerTask:
-	case types.RestartContainerTask:
 	case types.MigrateContainerTask:
-		// Get related event metadata
-		rcid := etype.Metadata["rcid"].(float64) // TODO
-		cname := GetContainerName(uint64(rcid))  // TODO
-
-		// Run task
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Executing ending task (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
-		DeleteContainer(ctx, cname)
-		fmt.Printf(blueMsgFormat, time.Now().Format("15:04:05.000000"), "Ending task executed (RCID="+strconv.FormatUint(uint64(rcid), 10)+")")
-	case types.DeleteContainerTask:
+		if event.Rcid > 0 {
+			// Run ending task
+			StopContainer(ctx, GetContainerName(event.Rcid))
+		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
 		return
@@ -406,55 +376,89 @@ func RunEventEndingTask(ctx context.Context, etype types.EventType) {
 ///////////
 // Tasks //
 ///////////
-func NewContainer(ctx context.Context, cinfo *types.ContainerInfo) {
+func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) {
 
-	// Local actions
-	cid := createDockerContainer(ctx, cinfo, "") // Empty cname
-	startDockerContainer(ctx, cid)
+	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c == nil {
+		createDockerContainer(ctx, cinfo, cname)
+		startDockerContainer(ctx, cname)
+	} else {
+		// Is the container running?
+		c = SearchDockerContainers(ctx, "name", cname, false)
+		if c == nil {
+			startDockerContainer(ctx, cname)
+		}
+	}
+}
 
-	// Distributed actions
-	RecordContainer(ctx, cid, &cinfo.ContainerType)
+func StartContainer(ctx context.Context, cname string) {
+
+	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		// Is the container running?
+		c = SearchDockerContainers(ctx, "name", cname, false)
+		if c == nil {
+			startDockerContainer(ctx, cname)
+		}
+	}
 }
 
 func RestartContainer(ctx context.Context, cname string) {
 
-	restartDockerContainer(ctx, cname)
+	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		// Is the container running?
+		c = SearchDockerContainers(ctx, "name", cname, false)
+		if c == nil {
+			startDockerContainer(ctx, cname)
+		} else {
+			restartDockerContainer(ctx, cname)
+		}
+	}
 }
 
-func DeleteContainer(ctx context.Context, cname string) {
+func StopContainer(ctx context.Context, cname string) {
 
-	// Distributed actions
-	RemoveContainer(cname)
-
-	// Local actions
-	// TODO. Timeout to stop a container
-	//stopDockerContainer(ctx, cname)
-	removeDockerContainer(ctx, cname)
+	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		// Is the container running?
+		c = SearchDockerContainers(ctx, "name", cname, false)
+		if c != nil {
+			stopDockerContainer(ctx, cname)
+		}
+	}
 }
 
-func BackupContainer() {
+func RemoveContainer(ctx context.Context, cname string) {
 
-	// TODO. Backup tasks. Improve flow
-	// commit --> create an image from a container (snapshot preserving rw)
-	// save, load --> compress and uncompress images (tar or stdin/stdout)
-	// volumes --> manual backup or using --volumes-from (temporal container)
+	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		// Is the container running?
+		c = SearchDockerContainers(ctx, "name", cname, false)
+		if c != nil {
+			stopDockerContainer(ctx, cname)
+			removeDockerContainer(ctx, cname)
+		} else {
+			removeDockerContainer(ctx, cname)
+		}
+	}
 }
 
-// About distributed registry
-func RecordContainer(ctx context.Context, cid string, ctype *types.ContainerType) {
+// TODO
+func DCRRegisterApplication(ctx context.Context, ainfo *types.ApplicationInfo, cinfos []types.ContainerInfo, autodeploy bool) {
 
-	cinfo := getContainerInfo(ctx, cid)
-	cinfo.ContainerType = *ctype // Set container type
-	stime := getContainerStartTime(ctx, cid)
-	recordContainerOnReg(cinfo, stime, cid)
+	RegisterApplication(ainfo, cinfos, autodeploy)
 }
 
-// About distributed registry
-func RemoveContainer(cname string) {
+// TODO
+func DCRRegisterContainer(ctx context.Context, appid uint64, cinfo *types.ContainerInfo, autodeploy bool) {
 
-	rcid := getRegContainerId(cname)
-	ftime := uint64(time.Now().Unix())
-	removeContainerFromReg(rcid, ftime)
+	RegisterContainer(appid, cinfo, autodeploy)
 }
 
 /////////////
@@ -474,16 +478,16 @@ func calculateCpuPercent(cpu, precpu *dockertypes.CPUStats) (pct float64) {
 	return
 }
 
-func getVolumesSize(ctx context.Context, mnts *[]dockertypes.MountPoint) (r uint64) {
+func getVolumesSize(ctx context.Context, mnts []dockertypes.MountPoint) (r uint64) {
 
 	// Get docker disk usage info (docker system df -v)
-	resp, err := _dcli.DiskUsage(ctx)
+	resp, err := _docc.DiskUsage(ctx)
 	utils.CheckError(err, utils.WarningMode)
 
 	// Search and compare volumes by name
-	for i := range *mnts {
+	for i := range mnts {
 		for j := range resp.Volumes {
-			if (*mnts)[i].Name == resp.Volumes[j].Name {
+			if mnts[i].Name == resp.Volumes[j].Name {
 				// Volume stats
 				count := resp.Volumes[j].UsageData.RefCount // Number of containers using this volume
 				size := resp.Volumes[j].UsageData.Size
@@ -515,6 +519,15 @@ func groupNetworkStats(net networks) (ns dockertypes.NetworkStats) {
 	return
 }
 
+func getNodeIP() net.IP {
+
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	utils.CheckError(err, utils.WarningMode)
+	defer conn.Close()
+
+	return conn.LocalAddr().(*net.UDPAddr).IP // Type assertion of an interface type
+}
+
 func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 
 	// To avoid repeated ports
@@ -536,7 +549,7 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 					}
 				}
 
-				if isNodePortAvailable(i.Proto(), "localhost", strp) && !isPortAllocatedByDocker(ctx, strp) && !found {
+				if utils.IsPortAvailable(i.Proto(), "localhost", strp) && !isPortAllocatedByDocker(ctx, strp) && !found {
 					ports[i][j].HostPort = strp
 					usedPorts = append(usedPorts, strp)
 					break
@@ -553,16 +566,4 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 	_pmutex.Unlock()
 
 	return ports
-}
-
-func isNodePortAvailable(network, host, port string) bool {
-
-	conn, err := net.Dial(network, net.JoinHostPort(host, port))
-
-	if err == nil && conn != nil {
-		conn.Close()
-		return false
-	} else {
-		return true
-	}
 }

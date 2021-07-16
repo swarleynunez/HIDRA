@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/swarleynunez/superfog/core/bindings"
 	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
@@ -14,7 +13,7 @@ import (
 )
 
 const (
-	yellowWarnFormat = "\033[1;33m[%s] %s (Limit: %v, Now: %v)\033[0m\n"
+	yellowWarnFormat = "\033[1;33m[%s] %s (Limit: %v, Usage: %v)\033[0m\n"
 )
 
 var (
@@ -24,110 +23,105 @@ var (
 	errNoContainersFound   = errors.New("no containers found")
 )
 
-func checkStateRules(ctx context.Context, cycles cycles, mInter, cTime uint64, ecache map[uint64]bool) {
+func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime uint64, ecache map[uint64]bool) {
 
-	state := managers.GetNodeState()
+	state := managers.GetState()
 
-	for _, v := range inputs.Rules {
-
+	for _, rule := range inputs.Rules {
 		// Current spec value (variable for different value types)
-		var now interface{}
+		var usage interface{}
 
-		switch v.Spec {
-		case types.CpuSpec:
-			now = selectCpuMetric(v.MetricType, state)
-		case types.MemSpec:
-			now = selectMemMetric(v.MetricType, state)
-		case types.DiskSpec:
-			now = selectDiskMetric(v.MetricType, state)
-		case types.PktSentSpec:
-			now = selectPktSentMetric(v.MetricType, state)
-		case types.PktRecvSpec:
-			now = selectPktRecvMetric(v.MetricType, state)
+		switch rule.Resource {
+		case types.CpuResource:
+			usage = selectCpuMetric(rule.MetricType, state)
+		case types.MemResource:
+			usage = selectMemMetric(rule.MetricType, state)
+		case types.DiskResource:
+			usage = selectDiskMetric(rule.MetricType, state)
+		case types.PktSentResource:
+			usage = selectPktSentMetric(rule.MetricType, state)
+		case types.PktRecvResource:
+			usage = selectPktRecvMetric(rule.MetricType, state)
 		default:
 			utils.CheckError(errUnknownSpec, utils.WarningMode)
 			continue // Drop rule check
 		}
 
-		if now == nil {
+		if usage == nil {
 			utils.CheckError(errBoundNotImplemented, utils.WarningMode)
 			continue // Drop rule check
 		}
 
-		// Get rule cycle counter (rcc)
-		cc := cycles[v.NameId]
+		// Get the rcc
+		rcc := rccs[rule.NameId]
 
 		// Count a measure if the rcc has already started
-		if cc.measures > 0 {
-			cc.measures++
+		if rcc.measures > 0 {
+			rcc.measures++
 		}
 
 		// Rule checking
-		if ok, err := utils.CompareValues(now, v.Comparator, v.Bound); ok {
+		if ok, err := utils.CompareValues(usage, rule.Comparator, rule.Limit); ok {
 
-			// Start a rcc
-			if cc.measures == 0 {
-				cc.measures++
+			// Start the rcc
+			if rcc.measures == 0 {
+				rcc.measures++
 			}
 
 			// Count a trigger
-			cc.triggers++
+			rcc.triggers++
 
-			// TODO. Rcc checking
-			if cc.measures == cTime/mInter && cc.measures == cc.triggers {
-				runRuleAction(ctx, &v, ecache, state, now)
+			if rcc.measures == ctime/minter && rcc.measures == rcc.triggers {
+				runRuleAction(ctx, &rule, ecache, state, usage)
 			}
 		} else {
 			utils.CheckError(err, utils.WarningMode)
 		}
 
-		// Reset rcc
-		if cc.measures == cTime/mInter {
-			cc = cycleCounter{}
+		// Reset the rcc
+		if rcc.measures == ctime/minter {
+			rcc = cycle{}
 		}
 
-		// Update rcc for the next state
-		cycles[v.NameId] = cc
+		// Update the rcc for the next state checking
+		rccs[rule.NameId] = rcc
 	}
 }
 
-func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool, state *types.State, now interface{}) {
+func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool, state *types.State, usage interface{}) {
 
 	switch rule.Action {
 	case types.SendEventAction:
-
-		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventInit\n")
-
-		// TODO
-		rcid, err := selectWorseContainer(ctx)
+		rcid, err := selectContainer(ctx)
 		if err == nil {
-
-			// TODO. Check if an event has already been sent for selected container
+			// Check if an event has already been sent for selected container
+			// TODO: change ecache struct and add time intervals (due to the static rcids)
 			if !ecache[rcid] {
 				ecache[rcid] = true
 
+				// Encapsulate event type
 				etype := types.EventType{
-					Spec: rule.Spec,
-					Task: types.MigrateContainerTask, // TODO
-					Metadata: map[string]interface{}{
-						"rcid": rcid,
-					},
+					RequiredTask:     types.MigrateContainerTask,
+					TroubledResource: rule.Resource,
 				}
-				go managers.SendEvent(&etype, state)
+
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Sending an event...\n")
+
+				go managers.SendEvent(&etype, rcid, state)
 			}
 		}
 		fallthrough
 	case types.ProceedAction:
 		if rule.Action == types.ProceedAction { // Due to the fallthrough
-			//managers.RunTask(ctx, types.CreateTask)	// TODO
+
 		}
 		fallthrough
 	case types.LogAction:
 		// Save log into a file, send log to a remote server...
 		fallthrough
 	case types.WarnAction:
-		fmt.Printf(yellowWarnFormat, time.Now().Format("15:04:05.000000"), rule.Msg, rule.Bound, now)
+		fmt.Printf(yellowWarnFormat, time.Now().Format("15:04:05.000000"), rule.Msg, rule.Limit, usage)
 	case types.IgnoreAction:
 		// Do nothing
 	default:
@@ -136,53 +130,46 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool
 	}
 }
 
-// Select the best event solver according to spec metrics
-func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Address) {
+// Select an event solver according to spec metrics
+func selectSolver(eid uint64) (addr common.Address) {
 
-	// Get related event header
 	event := managers.GetEvent(eid)
+	replies := managers.GetEventReplies(eid)
 
-	// Decode dynamic event type
+	// Decode event type
 	var etype types.EventType
-	utils.UnmarshalJSON(event.DynType, &etype)
-
-	// Get event replies
-	replies, err := cinst.GetEventReplies(nil, eid)
-	utils.CheckError(err, utils.WarningMode)
+	utils.UnmarshalJSON(event.EType, &etype)
 
 	// Current best value (variable for different value types)
 	var best interface{}
 
 	for _, v := range replies {
-
-		// Debug
-		//fmt.Println(v.Replier.String(), "-->", v.NodeState)
-
-		// Get replier specs
-		ns := managers.GetSpecs(v.Replier)
-
-		// Decode reply node state
+		// Decode replier state
 		var state types.State
 		utils.UnmarshalJSON(v.NodeState, &state)
 
+		// Get and decode replier specs
+		var specs types.NodeSpecs
+		utils.UnmarshalJSON(managers.GetNodeSpecs(v.Replier), &specs)
+
 		var met interface{}
-		var comp types.Comparator
+		var comp types.RuleComparator
 
 		// Select metric and comparator
-		switch etype.Spec {
-		case types.CpuSpec:
-			met = state.CpuPercent / ns.CpuMhz // Ratio
+		switch etype.TroubledResource {
+		case types.AllResources, types.CpuResource: // TODO: implement algorithm to check all resources at the same time
+			met = state.CpuUsage / specs.CpuMhz // Ratio
 			comp = types.LessComp
-		case types.MemSpec:
-			met = ns.MemTotal - state.MemUsage // Free memory
+		case types.MemResource:
+			met = specs.MemTotal - state.MemUsage // Free memory
 			comp = types.GreaterComp
-		case types.DiskSpec:
-			met = ns.DiskTotal - state.DiskUsage // Free storage space
+		case types.DiskResource:
+			met = specs.DiskTotal - state.DiskUsage // Free storage space
 			comp = types.GreaterComp
-		case types.PktSentSpec:
+		case types.PktSentResource:
 			met = state.NetPacketsSent // Sent packets
 			comp = types.LessComp
-		case types.PktRecvSpec:
+		case types.PktRecvResource:
 			met = state.NetPacketsRecv // Received packets
 			comp = types.LessComp
 		default:
@@ -203,8 +190,8 @@ func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Addre
 		}
 	}
 
-	// Debug: TODO
-	addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
+	// TODO. Debug
+	/*addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
 	addr2 := common.HexToAddress("0xb066c34E2C26E6E03042Ae4AA11Dfb9A28cd7C52")
 	addr3 := common.HexToAddress("0xa852f9A4f20651e4D6645d5200B5CAef06AFf4fB")
 
@@ -216,33 +203,24 @@ func selectBestSolver(eid uint64, cinst *bindings.Controller) (addr common.Addre
 		} else if addr == addr3 {
 			addr = addr1
 		}
-	}
+	}*/
 
 	return
 }
 
-// TODO. Select the worse container according to its config and spec usage
-func selectWorseContainer(ctx context.Context) (uint64, error) {
+// Select a container according to its config and spec usage
+func selectContainer(ctx context.Context) (uint64, error) {
 
 	// Get distributed registry active containers
-	ctrs := managers.GetContainerReg()
-	for key := range ctrs {
-		// Node account
-		from := managers.GetFromAccount()
-
-		// TODO: Am I the host?
-		if ctrs[key].Host == from.Address {
-			// Is the container running?
-			ctr := managers.SearchDockerContainers(ctx, "name", managers.GetContainerName(key), false)
-			if ctr != nil {
-				// Decode container info
-				var cinfo types.ContainerInfo
-				utils.UnmarshalJSON(ctrs[key].Info, &cinfo)
-
-				// TODO
-				//if cinfo.MainSpec == spec {
-				return key, nil
-				//}
+	ac := managers.GetActiveContainers()
+	for rcid := range ac {
+		// Am I the host?
+		if managers.IsContainerHost(rcid, managers.GetFromAccount()) {
+			cname := managers.GetContainerName(rcid)
+			c := managers.SearchDockerContainers(ctx, "name", cname, true)
+			if c != nil {
+				// TODO: implement container selector
+				return rcid, nil
 			}
 		}
 	}
@@ -250,60 +228,60 @@ func selectWorseContainer(ctx context.Context) (uint64, error) {
 	return 0, errNoContainersFound
 }
 
-// Functions to select the spec metric type depending on the rule bound type
-func selectCpuMetric(mt types.MetricType, state *types.State) (now interface{}) {
+// Functions to select the spec metric type depending on the rule limit type
+func selectCpuMetric(mt types.RuleMetricType, state *types.State) (usage interface{}) {
 
 	switch mt {
 	case types.PercentMetric:
-		now = state.CpuPercent // Usage %
+		usage = state.CpuUsage // Usage %
 	}
 
 	return
 }
 
-func selectMemMetric(mt types.MetricType, state *types.State) (now interface{}) {
+func selectMemMetric(mt types.RuleMetricType, state *types.State) (usage interface{}) {
 
-	specs := managers.GetNodeSpecs()
+	specs := managers.GetSpecs()
 
 	switch mt {
 	case types.UnitsMetric:
-		now = state.MemUsage // Bytes
+		usage = state.MemUsage // Bytes
 	case types.PercentMetric:
-		now = (float64(state.MemUsage) / float64(specs.MemTotal)) * 100.0
+		usage = (float64(state.MemUsage) / float64(specs.MemTotal)) * 100.0
 	}
 
 	return
 }
 
-func selectDiskMetric(mt types.MetricType, state *types.State) (now interface{}) {
+func selectDiskMetric(mt types.RuleMetricType, state *types.State) (usage interface{}) {
 
-	specs := managers.GetNodeSpecs()
+	specs := managers.GetSpecs()
 
 	switch mt {
 	case types.UnitsMetric:
-		now = state.DiskUsage // Bytes
+		usage = state.DiskUsage // Bytes
 	case types.PercentMetric:
-		now = (float64(state.DiskUsage) / float64(specs.DiskTotal)) * 100.0
+		usage = (float64(state.DiskUsage) / float64(specs.DiskTotal)) * 100.0
 	}
 
 	return
 }
 
-func selectPktSentMetric(mt types.MetricType, state *types.State) (now interface{}) {
+func selectPktSentMetric(mt types.RuleMetricType, state *types.State) (usage interface{}) {
 
 	switch mt {
 	case types.UnitsMetric:
-		now = state.NetPacketsSent // Packet count
+		usage = state.NetPacketsSent // Packet count
 	}
 
 	return
 }
 
-func selectPktRecvMetric(mt types.MetricType, state *types.State) (now interface{}) {
+func selectPktRecvMetric(mt types.RuleMetricType, state *types.State) (usage interface{}) {
 
 	switch mt {
 	case types.UnitsMetric:
-		now = state.NetPacketsRecv // Packet count
+		usage = state.NetPacketsRecv // Packet count
 	}
 
 	return

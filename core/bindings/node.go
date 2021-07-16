@@ -27,7 +27,7 @@ var (
 )
 
 // NodeABI is the input ABI used to generate the binding from.
-const NodeABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"nodeAddr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"getReputation\",\"outputs\":[{\"internalType\":\"int64\",\"name\":\"\",\"type\":\"int64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"nodeSpecs\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"int64\",\"name\":\"variation\",\"type\":\"int64\"}],\"name\":\"setVariation\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"specs\",\"type\":\"string\"}],\"name\":\"updateSpecs\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+const NodeABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"},{\"internalType\":\"int64\",\"name\":\"_reputation\",\"type\":\"int64\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"getReputation\",\"outputs\":[{\"internalType\":\"int64\",\"name\":\"\",\"type\":\"int64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getSpecs\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"int64\",\"name\":\"variation\",\"type\":\"int64\"}],\"name\":\"setVariation\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"}],\"name\":\"updateSpecs\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
 // Node is an auto generated Go binding around an Ethereum contract.
 type Node struct {
@@ -202,12 +202,12 @@ func (_Node *NodeCallerSession) GetReputation() (int64, error) {
 	return _Node.Contract.GetReputation(&_Node.CallOpts)
 }
 
-// NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
+// GetSpecs is a free data retrieval call binding the contract method 0x2c844f50.
 //
-// Solidity: function nodeSpecs() view returns(string)
-func (_Node *NodeCaller) NodeSpecs(opts *bind.CallOpts) (string, error) {
+// Solidity: function getSpecs() view returns(string)
+func (_Node *NodeCaller) GetSpecs(opts *bind.CallOpts) (string, error) {
 	var out []interface{}
-	err := _Node.contract.Call(opts, &out, "nodeSpecs")
+	err := _Node.contract.Call(opts, &out, "getSpecs")
 
 	if err != nil {
 		return *new(string), err
@@ -219,18 +219,18 @@ func (_Node *NodeCaller) NodeSpecs(opts *bind.CallOpts) (string, error) {
 
 }
 
-// NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
+// GetSpecs is a free data retrieval call binding the contract method 0x2c844f50.
 //
-// Solidity: function nodeSpecs() view returns(string)
-func (_Node *NodeSession) NodeSpecs() (string, error) {
-	return _Node.Contract.NodeSpecs(&_Node.CallOpts)
+// Solidity: function getSpecs() view returns(string)
+func (_Node *NodeSession) GetSpecs() (string, error) {
+	return _Node.Contract.GetSpecs(&_Node.CallOpts)
 }
 
-// NodeSpecs is a free data retrieval call binding the contract method 0x3012be01.
+// GetSpecs is a free data retrieval call binding the contract method 0x2c844f50.
 //
-// Solidity: function nodeSpecs() view returns(string)
-func (_Node *NodeCallerSession) NodeSpecs() (string, error) {
-	return _Node.Contract.NodeSpecs(&_Node.CallOpts)
+// Solidity: function getSpecs() view returns(string)
+func (_Node *NodeCallerSession) GetSpecs() (string, error) {
+	return _Node.Contract.GetSpecs(&_Node.CallOpts)
 }
 
 // SetVariation is a paid mutator transaction binding the contract method 0xb50b62c9.
@@ -256,21 +256,21 @@ func (_Node *NodeTransactorSession) SetVariation(variation int64) (*types.Transa
 
 // UpdateSpecs is a paid mutator transaction binding the contract method 0xb60bdb29.
 //
-// Solidity: function updateSpecs(string specs) returns()
-func (_Node *NodeTransactor) UpdateSpecs(opts *bind.TransactOpts, specs string) (*types.Transaction, error) {
-	return _Node.contract.Transact(opts, "updateSpecs", specs)
+// Solidity: function updateSpecs(string _specs) returns()
+func (_Node *NodeTransactor) UpdateSpecs(opts *bind.TransactOpts, _specs string) (*types.Transaction, error) {
+	return _Node.contract.Transact(opts, "updateSpecs", _specs)
 }
 
 // UpdateSpecs is a paid mutator transaction binding the contract method 0xb60bdb29.
 //
-// Solidity: function updateSpecs(string specs) returns()
-func (_Node *NodeSession) UpdateSpecs(specs string) (*types.Transaction, error) {
-	return _Node.Contract.UpdateSpecs(&_Node.TransactOpts, specs)
+// Solidity: function updateSpecs(string _specs) returns()
+func (_Node *NodeSession) UpdateSpecs(_specs string) (*types.Transaction, error) {
+	return _Node.Contract.UpdateSpecs(&_Node.TransactOpts, _specs)
 }
 
 // UpdateSpecs is a paid mutator transaction binding the contract method 0xb60bdb29.
 //
-// Solidity: function updateSpecs(string specs) returns()
-func (_Node *NodeTransactorSession) UpdateSpecs(specs string) (*types.Transaction, error) {
-	return _Node.Contract.UpdateSpecs(&_Node.TransactOpts, specs)
+// Solidity: function updateSpecs(string _specs) returns()
+func (_Node *NodeTransactorSession) UpdateSpecs(_specs string) (*types.Transaction, error) {
+	return _Node.Contract.UpdateSpecs(&_Node.TransactOpts, _specs)
 }

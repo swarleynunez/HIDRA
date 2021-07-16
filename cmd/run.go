@@ -19,7 +19,7 @@ var runCmd = &cobra.Command{
 		managers.InitNode(ctx, false)
 
 		// Check if node is registered
-		if !managers.IsNodeRegistered(managers.GetFromAccount().Address) {
+		if !managers.IsNodeRegistered(managers.GetFromAccount()) {
 			// Debug
 			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node not registered at loaded controller address\n")
 			os.Exit(0)
