@@ -14,7 +14,7 @@ import (
 
 var (
 	errUnknownComp   = errors.New("unknown comparator")
-	errMismatchTypes = errors.New("mismatch value types")
+	errMismatchTypes = errors.New("value type mismatch")
 	errUnknownType   = errors.New("unknown value type")
 )
 
@@ -67,7 +67,7 @@ func EmptyEthAddress(addr string) bool {
 
 func ValidEthAddress(addr string) bool {
 
-	re := regexp.MustCompile("^(?i)(0x)?[0-9a-f]{40}$") // (?i) case insensitive, (0x)? optional hex prefix
+	re := regexp.MustCompile(`(?i)(0x)?[0-9a-f]{40}`) // (?i) case insensitive, (0x)? optional hex prefix
 	return re.MatchString(addr)
 }
 

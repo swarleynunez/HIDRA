@@ -14,6 +14,7 @@ import (
 
 const (
 	yellowWarnFormat = "\033[1;33m[%s] %s (Limit: %v, Usage: %v)\033[0m\n"
+	//yellowWarnFormat = "[%s] %s (Limit: %v, Usage: %v)\n"
 )
 
 var (
@@ -106,9 +107,12 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool
 				}
 
 				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Sending an event...\n")
+				//fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Sending an event...\n")
 
-				go managers.SendEvent(&etype, rcid, state)
+				go func() {
+					err = managers.SendEvent(ctx, &etype, rcid, state)
+					utils.CheckError(err, utils.WarningMode)
+				}()
 			}
 		}
 		fallthrough
@@ -212,8 +216,8 @@ func selectSolver(eid uint64) (addr common.Address) {
 func selectContainer(ctx context.Context) (uint64, error) {
 
 	// Get distributed registry active containers
-	ac := managers.GetActiveContainers()
-	for rcid := range ac {
+	ctrs := managers.GetActiveContainers()
+	for rcid := range ctrs {
 		// Am I the host?
 		if managers.IsContainerHost(rcid, managers.GetFromAccount()) {
 			cname := managers.GetContainerName(rcid)

@@ -1,12 +1,13 @@
 package eth
 
 import (
+	"context"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/swarleynunez/superfog/core/utils"
 	"math/big"
-	"os"
 	"strconv"
 )
 
@@ -36,17 +37,19 @@ import (
 	utils.CheckError(err, utils.WarningMode)
 }*/
 
-func GetTransactor(ks *keystore.KeyStore, from accounts.Account, nonce, gasLimit uint64) *bind.TransactOpts {
+func Transactor(ctx context.Context, ethc *ethclient.Client, ks *keystore.KeyStore, from accounts.Account, gasLimit uint64) *bind.TransactOpts {
 
 	// Get and parse chain ID (transaction replay protection)
-	chainId, err := strconv.ParseUint(os.Getenv("CHAIN_ID"), 10, 64)
-	utils.CheckError(err, utils.WarningMode)
+	chainId, err := strconv.ParseUint(utils.GetEnv("CHAIN_ID"), 10, 64)
+	utils.CheckError(err, utils.FatalMode)
 
 	// Auth transactor type
 	auth, err := bind.NewKeyStoreTransactorWithChainID(ks, from, big.NewInt(int64(chainId)))
-	utils.CheckError(err, utils.WarningMode)
+	utils.CheckError(err, utils.FatalMode)
 
 	// Set nonce
+	nonce, err := ethc.PendingNonceAt(ctx, from.Address) // Get loaded Ethereum account current nonce
+	utils.CheckError(err, utils.FatalMode)
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	// Set gas limit

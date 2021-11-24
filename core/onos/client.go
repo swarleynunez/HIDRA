@@ -2,46 +2,66 @@ package onos
 
 import (
 	"errors"
-	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
 	"net"
 	"net/http"
-	"os"
+	"net/url"
 	"strconv"
+	"time"
 )
 
 var (
-	errMalformedIP   = errors.New("malformed IP address")
-	errMalformedPort = errors.New("malformed port")
+	errMalformedIP   = errors.New("malformed onos controller ip")
+	errMalformedPort = errors.New("malformed onos controller port")
 )
 
-func Connect() *types.ONOSClient {
+// Client for ONOS virtual service API requests
+type Client struct {
+	BaseURL *url.URL     // Base URL to all requests
+	Client  *http.Client // To send and receive requests
+	Enabled bool         // Is the ONOS module enabled?
+}
 
-	enabled, err := strconv.ParseBool(os.Getenv("ONOS_ENABLED"))
-	utils.CheckError(err, utils.FatalMode)
+func Connect() *Client {
+
+	enabled, err := strconv.ParseBool(utils.GetEnv("ONOS_ENABLED"))
+	if err != nil {
+		enabled = false
+	}
 
 	if enabled {
-		ip := os.Getenv("ONOS_CONTROLLER_IP")
+		ip := utils.GetEnv("ONOS_CONTROLLER_IP")
 		if net.ParseIP(ip) == nil {
 			utils.CheckError(errMalformedIP, utils.FatalMode)
 		}
 
-		port, err := strconv.ParseUint(os.Getenv("ONOS_CONTROLLER_PORT"), 10, 16)
+		port, err := strconv.ParseUint(utils.GetEnv("ONOS_CONTROLLER_PORT"), 10, 16)
 		if err != nil || port == 0 {
 			utils.CheckError(errMalformedPort, utils.FatalMode)
 		}
 
-		strp := strconv.FormatUint(port, 10)
-		if !utils.IsPortAvailable("tcp", ip, strp) {
-			return &types.ONOSClient{
-				Scheme:   "http",
-				Host:     net.JoinHostPort(ip, strp),
-				BasePath: "/onos/vs",
-				Client:   http.DefaultClient,
-				Enabled:  true,
-			}
+		// Set ONOS client
+		onosc := &Client{
+			BaseURL: &url.URL{
+				Scheme: "http",
+				Host:   net.JoinHostPort(ip, strconv.FormatUint(port, 10)),
+				Path:   "/onos/vs",
+			},
+			Client: &http.Client{
+				Timeout: 30 * time.Second,
+			},
+			Enabled: true,
 		}
+
+		// Initialize ONOS API routes
+		initRoutes()
+
+		// Check connection
+		err = onosc.Request("ping", "")
+		utils.CheckError(err, utils.FatalMode)
+
+		return onosc
 	}
 
-	return &types.ONOSClient{}
+	return &Client{}
 }

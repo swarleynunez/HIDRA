@@ -149,7 +149,7 @@ func TestRegisterApplication(t *testing.T) {
 	if getClusterState().NextAppId != 2 ||
 		app.Owner != common.HexToAddress("0xbfdcef8b53327344018a2c569d288f8249c4ff89") ||
 		app.Info == "" ||
-		len(getApplicationContainers(appid)) != 1 ||
+		len(GetApplicationContainers(appid)) != 1 ||
 		app.RegisteredAt.Uint64() == 0 ||
 		app.UnregisteredAt.Uint64() != 0 ||
 		len(getActiveApplications()) != 1 ||
@@ -234,7 +234,7 @@ func TestUnregisterApplication(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	app := GetApplication(appid)
 	if app.UnregisteredAt.Uint64() == 0 ||
-		len(getApplicationContainers(appid)) != 0 ||
+		len(GetApplicationContainers(appid)) != 0 ||
 		len(getActiveApplications()) != 0 ||
 		len(GetActiveContainers()) != 0 {
 		t.Fatal("ERROR:", t.Name())
@@ -257,7 +257,7 @@ func TestUnregisterContainer(t *testing.T) {
 	appid := getClusterState().NextAppId - 1
 	if ctr.UnregisteredAt.Uint64() == 0 ||
 		isContainerActive(rcid) ||
-		len(getApplicationContainers(appid)) != 0 ||
+		len(GetApplicationContainers(appid)) != 0 ||
 		len(GetActiveContainers()) != 0 {
 		t.Fatal("ERROR:", t.Name())
 	}

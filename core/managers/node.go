@@ -20,11 +20,11 @@ import (
 	"github.com/swarleynunez/superfog/core/bindings"
 	"github.com/swarleynunez/superfog/core/docker"
 	"github.com/swarleynunez/superfog/core/eth"
+	"github.com/swarleynunez/superfog/core/onos"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
 	"math"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -59,13 +59,11 @@ var (
 	_ethc   *ethclient.Client
 	_ks     *keystore.KeyStore
 	_from   accounts.Account
-	_nonce  uint64
-	_nmutex *sync.Mutex
 	_pmutex *sync.Mutex
 	_cinst  *bindings.Controller
 	_finst  *bindings.Faucet
 	_docc   *client.Client
-	_onosc  *types.ONOSClient
+	_onosc  *onos.Client
 
 	// Errors
 	errUnknownTask = errors.New("unknown event task")
@@ -82,9 +80,9 @@ func InitNode(ctx context.Context, deploying bool) {
 	utils.LoadEnv()
 
 	var (
-		nodeDir = os.Getenv("ETH_NODE_DIR")
-		addr    = os.Getenv("NODE_ADDR")
-		pass    = os.Getenv("NODE_PASS")
+		nodeDir = utils.GetEnv("ETH_NODE_DIR")
+		// TODO: test --> addr    = utils.GetEnv("NODE_ADDR")
+		pass = utils.GetEnv("NODE_PASS")
 	)
 
 	// Connect to the Ethereum local node
@@ -95,17 +93,12 @@ func InitNode(ctx context.Context, deploying bool) {
 	_ks = eth.LoadKeystore(keypath)
 
 	// Load and unlock an Ethereum account
-	_from = eth.LoadAccount(_ks, addr, pass)
+	// TODO: test --> _from = eth.LoadAccount(_ks, addr, pass)
+	_from = eth.LoadAccount(_ks, pass)
 
 	// Debug
 	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded account: "+_from.Address.String(), "\n")
 
-	// Get loaded Ethereum account nonce
-	nonce, err := _ethc.PendingNonceAt(context.Background(), _from.Address)
-	utils.CheckError(err, utils.FatalMode)
-	_nonce = nonce
-
-	_nmutex = &sync.Mutex{} // Mutex to synchronize access to account nonce
 	_pmutex = &sync.Mutex{} // Mutex to synchronize access to network ports
 
 	// Get smart contracts instances
@@ -114,14 +107,14 @@ func InitNode(ctx context.Context, deploying bool) {
 		_finst = faucetInstance(getFaucetContract())
 
 		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", os.Getenv("CONTROLLER_ADDR"), "\n")
+		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
 	}
 
 	// Connect to the Docker local node
 	_docc = docker.Connect(ctx)
 
 	// Connect to a cluster ONOS controller
-	//_onosc = onos.Connect()
+	_onosc = onos.Connect()
 }
 
 func InitNodeState(ctx context.Context) {
@@ -140,7 +133,11 @@ func InitNodeState(ctx context.Context) {
 				var cinfo types.ContainerInfo
 				utils.UnmarshalJSON(ctrs[rcid].Info, &cinfo)
 
-				go NewContainer(ctx, &cinfo, cname)
+				// TODO: check ONOS SDN state when nodes initialize its container state
+				go func() {
+					createDockerContainer(ctx, &cinfo, cname)
+					startDockerContainer(ctx, cname)
+				}()
 			} else {
 				// Is the container running?
 				c = SearchDockerContainers(ctx, "name", cname, false)
@@ -306,14 +303,12 @@ func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 			utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 			// Run task
-			NewContainer(ctx, &cinfo, GetContainerName(event.Rcid))
+			NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
 		}
 	case types.MigrateContainerTask:
 		if event.Rcid > 0 {
-			// Run task
+			// TODO: run tasks to balance cluster nodes (resource usage)?
 			RestartContainer(ctx, GetContainerName(event.Rcid))
-
-			// TODO: other tasks to balance the cluster?
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -321,7 +316,8 @@ func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 	}
 
 	// Solve related event
-	SolveEvent(eid)
+	err := SolveEvent(ctx, eid)
+	utils.CheckError(err, utils.WarningMode)
 }
 
 // Tasks to execute when the cluster selects a solver
@@ -342,7 +338,7 @@ func RunEventTask(ctx context.Context, event *types.Event, eid uint64) {
 			utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 			// Run event task
-			NewContainer(ctx, &cinfo, GetContainerName(event.Rcid))
+			NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -350,7 +346,8 @@ func RunEventTask(ctx context.Context, event *types.Event, eid uint64) {
 	}
 
 	// Solve related event
-	SolveEvent(eid)
+	err := SolveEvent(ctx, eid)
+	utils.CheckError(err, utils.WarningMode)
 }
 
 // Tasks to execute when the cluster solve an event
@@ -362,10 +359,14 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 
 	switch etype.RequiredTask {
 	case types.NewContainerTask:
+		// Do nothing
 	case types.MigrateContainerTask:
 		if event.Rcid > 0 {
+			// Get container linked to the event
+			ctr := GetContainer(event.Rcid)
+
 			// Run ending task
-			StopContainer(ctx, GetContainerName(event.Rcid))
+			StopContainer(ctx, ctr.Appid, event.Rcid, true)
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -376,9 +377,11 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 ///////////
 // Tasks //
 ///////////
-func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) {
+// sdnaction: require ONOS SDN additional actions?
+func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid uint64, onosaction bool) {
 
 	// Does the container exist locally?
+	cname := GetContainerName(rcid)
 	c := SearchDockerContainers(ctx, "name", cname, true)
 	if c == nil {
 		createDockerContainer(ctx, cinfo, cname)
@@ -389,6 +392,15 @@ func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string)
 		if c == nil {
 			startDockerContainer(ctx, cname)
 		}
+	}
+
+	// TODO: integrate Docker HEALTHCHECK
+	time.Sleep(5 * time.Second)
+
+	// ONOS SDN plugin
+	if onosaction {
+		ONOSAddVSInstance(ctx, appid, rcid, getNodeIP())
+		ONOSActivateVirtualService(appid)
 	}
 }
 
@@ -420,9 +432,29 @@ func RestartContainer(ctx context.Context, cname string) {
 	}
 }
 
-func StopContainer(ctx context.Context, cname string) {
+// Rename a container (temporarily, before remove the container)
+/*func RenameContainer(ctx context.Context, cname string) (cid string) {
 
 	// Does the container exist locally?
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		cid = c[0].ID
+		renameDockerContainer(ctx, cname, cid)
+	}
+
+	return
+}*/
+
+// onosaction: require ONOS SDN additional actions?
+func StopContainer(ctx context.Context, appid, rcid uint64, onosaction bool) {
+
+	// ONOS SDN plugin
+	if onosaction {
+		ONOSDeleteVSInstance(appid, rcid)
+	}
+
+	// Does the container exist locally?
+	cname := GetContainerName(rcid)
 	c := SearchDockerContainers(ctx, "name", cname, true)
 	if c != nil {
 		// Is the container running?
@@ -433,9 +465,16 @@ func StopContainer(ctx context.Context, cname string) {
 	}
 }
 
-func RemoveContainer(ctx context.Context, cname string) {
+// onosaction: require ONOS SDN additional actions?
+func RemoveContainer(ctx context.Context, appid, rcid uint64, onosaction bool) {
+
+	// ONOS SDN plugin
+	if onosaction {
+		ONOSDeleteVSInstance(appid, rcid)
+	}
 
 	// Does the container exist locally?
+	cname := GetContainerName(rcid)
 	c := SearchDockerContainers(ctx, "name", cname, true)
 	if c != nil {
 		// Is the container running?
@@ -449,16 +488,14 @@ func RemoveContainer(ctx context.Context, cname string) {
 	}
 }
 
-// TODO
-func DCRRegisterApplication(ctx context.Context, ainfo *types.ApplicationInfo, cinfos []types.ContainerInfo, autodeploy bool) {
+func RemoveDCRApplication(ctx context.Context, appid uint64) error {
 
-	RegisterApplication(ainfo, cinfos, autodeploy)
-}
+	err := UnregisterApplication(ctx, appid)
+	if err == nil {
+		ONOSDeleteVirtualService(appid)
+	}
 
-// TODO
-func DCRRegisterContainer(ctx context.Context, appid uint64, cinfo *types.ContainerInfo, autodeploy bool) {
-
-	RegisterContainer(appid, cinfo, autodeploy)
+	return err
 }
 
 /////////////
@@ -549,7 +586,7 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 					}
 				}
 
-				if utils.IsPortAvailable(i.Proto(), "localhost", strp) && !isPortAllocatedByDocker(ctx, strp) && !found {
+				if isNodePortAvailable(i.Proto(), "localhost", strp) && !isPortAllocatedByDocker(ctx, strp) && !found {
 					ports[i][j].HostPort = strp
 					usedPorts = append(usedPorts, strp)
 					break
@@ -566,4 +603,17 @@ func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
 	_pmutex.Unlock()
 
 	return ports
+}
+
+func isNodePortAvailable(network, host, port string) bool {
+
+	conn, err := net.Dial(network, net.JoinHostPort(host, port))
+
+	if err == nil && conn != nil {
+		// Successful connection
+		conn.Close()
+		return false
+	} else {
+		return true
+	}
 }

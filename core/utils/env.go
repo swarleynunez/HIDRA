@@ -10,7 +10,7 @@ import (
 func LoadEnv() {
 
 	// Load .env keys for this process
-	err := godotenv.Load("../../.env") // TODO: testing
+	err := godotenv.Load(".env")
 	CheckError(err, FatalMode)
 }
 
@@ -24,17 +24,17 @@ func GetEnv(key string) (value string) {
 	return
 }
 
-func SetEnvKey(key, value string) {
+func SetEnv(key, value string) {
 
 	// Read .env keys into a map
-	env, err := godotenv.Read("../../.env") // TODO: testing
+	env, err := godotenv.Read(".env")
 	CheckError(err, WarningMode)
 
 	// Add or modify a key-value
 	env[key] = value
 
 	// Write map into .env file
-	err = godotenv.Write(env, "../../.env") // TODO: testing
+	err = godotenv.Write(env, ".env")
 	CheckError(err, WarningMode)
 
 	// Reload .env configuration
@@ -44,6 +44,6 @@ func SetEnvKey(key, value string) {
 func overloadEnv() {
 
 	// Reload .env keys for this process
-	err := godotenv.Overload("../../.env") // TODO: testing
+	err := godotenv.Overload(".env")
 	CheckError(err, WarningMode)
 }

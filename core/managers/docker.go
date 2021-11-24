@@ -2,6 +2,7 @@ package managers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -18,6 +19,10 @@ import (
 
 const (
 	cnameTemplate = "hidra.io_rcid-"
+)
+
+var (
+	errContainerNotFound = errors.New("container not found")
 )
 
 ////////////
@@ -78,13 +83,16 @@ func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cnam
 	ports := checkNodePorts(ctx, cinfo.Ports)
 
 	// Set container configs
-	ctrConfig := &container.Config{Image: imgTag}
+	ctrConfig := &container.Config{
+		Env:   cinfo.Envs,
+		Image: imgTag,
+	}
 	hostConfig := &container.HostConfig{
 		Binds:        cinfo.Volumes,
 		PortBindings: ports,
 		Resources: container.Resources{
-			Memory:   int64(cinfo.MemLimit),
-			NanoCPUs: int64(cinfo.CPULimit),
+			Memory: int64(cinfo.MemLimit),
+			//NanoCPUs: int64(cinfo.CPULimit),
 		},
 	}
 	netConfig := &network.NetworkingConfig{}
@@ -103,6 +111,12 @@ func restartDockerContainer(ctx context.Context, cname string) {
 
 	// Stop and start container
 	err := _docc.ContainerRestart(ctx, cname, nil) // nil = do not wait to start container
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func renameDockerContainer(ctx context.Context, cname, new string) {
+
+	err := _docc.ContainerRename(ctx, cname, new)
 	utils.CheckError(err, utils.WarningMode)
 }
 
@@ -191,4 +205,16 @@ func isPortAllocatedByDocker(ctx context.Context, port string) bool {
 	}
 
 	return false
+}
+
+// Get mapped port information of a container
+func getContainerPortInfo(ctx context.Context, cname string) (*dockertypes.Port, error) {
+
+	c := SearchDockerContainers(ctx, "name", cname, true)
+	if c != nil {
+		// TODO: just look for the first mapped port
+		return &c[0].Ports[0], nil
+	}
+
+	return nil, errContainerNotFound
 }

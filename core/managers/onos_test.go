@@ -2,8 +2,13 @@ package managers
 
 import (
 	"context"
-	"github.com/swarleynunez/superfog/core/utils"
+	"net"
 	"testing"
+)
+
+var (
+	appid uint64 = 1
+	rcid  uint64 = 1
 )
 
 func init() {
@@ -11,47 +16,90 @@ func init() {
 	InitNode(context.Background(), false)
 }
 
-/*func TestConn(t *testing.T) {
+func TestONOSRequest(t *testing.T) {
 
-	baseURL := url.URL{
-		Scheme: "http",
-		Host:   "192.168.0.41:8181",
-		Path:   "/onos/vs",
-	}
-
-	type Route struct {
-		Method string
-		Path   string
-		//Handler func()
-	}
-
-	var routes = map[string]Route{}
-	routes["all"] = Route{
-		Method: "GET",
-		Path:   "/all",
-	}
-
-	req, err := http.NewRequest(routes["all"].Method, baseURL.String()+routes["all"].Path, nil)
-	utils.CheckError(err, utils.WarningMode)
-
-	req.SetBasicAuth("onos", "rocks")
-
-	res, err := http.DefaultClient.Do(req)
-	utils.CheckError(err, utils.WarningMode)
-
-	// Build a string from the response body
-	var body strings.Builder
-	_, err = io.Copy(&body, res.Body)
-	utils.CheckError(err, utils.WarningMode)
-
-	var vss struct{ VServices []types.ONOSVService }
-	utils.UnmarshalJSON(body.String(), &vss)
-
-	t.Log(vss)
-}*/
-
-func TestONOSConnect(t *testing.T) {
-
-	//t.Log(onos.Connect())
-	t.Log(utils.GetEnv("ONOS_ENABLED"))
+	ONOSAddVirtualService(appid, "NGINX V1", net.IP("192.168.0.10"), "TCP", 8888)
+	ONOSAddVirtualService(appid, "NGINX VX", net.IP("192.168.0.20"), "UDP", 1234)
+	ONOSAddVirtualService(appid+1, "NGINX V2", net.IP("192.168.0.11"), "TCP", 8888)
+	ONOSAddVirtualService(appid+2, "NGINX V3", net.IP("192.168.0.11"), "TCP", 8080)
+	ONOSAddVirtualService(appid+3, "NGINX VX", net.IP("192.168.0.10"), "TCP", 8888)
+	ONOSAddVSInstance(context.Background(), appid, rcid, net.IP("172.19.202.107"))
+	ONOSAddVSInstance(context.Background(), appid, rcid, net.IP("172.19.202.107"))
+	ONOSAddVSInstance(context.Background(), appid, rcid, net.IP("172.19.202.108"))
+	ONOSAddVSInstance(context.Background(), appid, rcid, net.IP("172.19.202.109"))
+	ONOSDeleteVSInstance(appid, rcid)
+	ONOSDeleteVSInstance(appid+1, rcid)
 }
+
+/*func TestONOSGetAllVServices(t *testing.T) {
+
+	err := onosc.Request("vss", "")
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSGetAllVServicesOn(t *testing.T) {
+
+	err := onosc.Request("vss_on", "")
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSGetAllVServicesOff(t *testing.T) {
+
+	err := onosc.Request("vss_off", "")
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSActivateVService(t *testing.T) {
+
+	err := onosc.Request("vs_on", "", vsid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSGetVService(t *testing.T) {
+
+	err := onosc.Request("vs", "", vsid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSDeactivateVService(t *testing.T) {
+
+	err := onosc.Request("vs_off", "", vsid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSSetVServiceServer(t *testing.T) {
+
+	s := types.ONOSVSServer{
+		IP:       "20.0.0.20",
+		Protocol: "UDP",
+		Port:     1234,
+	}
+
+	err := onosc.Request("server_set", utils.MarshalJSON(s), vsid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSAddVServiceInst(t *testing.T) {
+
+	inst := types.ONOSVSInstance{
+		ID:       instid + 1,
+		IP:       "192.168.0.10",
+		Protocol: "UDP",
+		Port:     8080,
+	}
+
+	err := onosc.Request("inst_add", utils.MarshalJSON(inst), vsid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSDeleteVServiceInst(t *testing.T) {
+
+	err := onosc.Request("inst_del", "", vsid, instid)
+	utils.CheckError(err, utils.WarningMode)
+}
+
+func TestONOSDeleteVService(t *testing.T) {
+
+	err := onosc.Request("vs_del", "", vsid)
+	utils.CheckError(err, utils.WarningMode)
+}*/

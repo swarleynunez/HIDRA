@@ -15,8 +15,8 @@ type Application struct {
 }
 
 type ApplicationInfo struct {
-	IP          net.IP `json:"ip"`   // Virtual service IP
-	Port        uint16 `json:"port"` // Virtual service port
-	Protocol    string `json:"prot"` // Virtual service transport protocol (TCP or UDP)
 	Description string `json:"desc"`
+	IP          net.IP `json:"ip"`   // Virtual service IP
+	Protocol    string `json:"prot"` // Virtual service transport protocol (TCP or UDP)
+	Port        uint16 `json:"port"` // Virtual service port
 }

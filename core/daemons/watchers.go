@@ -11,70 +11,75 @@ import (
 )
 
 // DEL (debug: all cluster nodes)
-func WatchNewEvent() {
+func WatchNewEvent(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
+	// Log channel
 	logs := make(chan *bindings.ControllerNewEvent)
 
 	// Subscription to the event
 	sub, err := cinst.WatchNewEvent(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Eid] {
-				ecache[log.Eid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Eid] {
+				lcache[log.Eid] = true
 
 				// Debug
 				event := managers.GetEvent(log.Eid)
 				if event.Rcid > 0 {
 					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
-
 				} else {
 					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
 				}
 
-				// Send a event reply containing the current node state
-				go managers.SendReply(log.Eid, managers.GetState())
+				// Am I the event sender?
+				from := managers.GetFromAccount()
+				if event.Sender != from {
+					// Send an event reply containing the current node state
+					go func() {
+						err = managers.SendReply(ctx, log.Eid, managers.GetState())
+						utils.CheckError(err, utils.WarningMode)
+					}()
+				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
 }
 
 // DEL (debug: all cluster nodes)
-func WatchRequiredReplies() {
+func WatchRequiredReplies(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerRequiredReplies)
 
 	// Subscription to the event
 	sub, err := cinst.WatchRequiredReplies(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Eid] {
-				ecache[log.Eid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Eid] {
+				lcache[log.Eid] = true
 
 				// Debug
 				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
@@ -82,10 +87,13 @@ func WatchRequiredReplies() {
 				// Select and vote an event solver
 				solver := selectSolver(log.Eid)
 				if !utils.EmptyEthAddress(solver.String()) {
-					go managers.VoteSolver(log.Eid, solver)
+					go func() {
+						err = managers.VoteSolver(ctx, log.Eid, solver)
+						utils.CheckError(err, utils.WarningMode)
+					}()
 				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
@@ -97,23 +105,22 @@ func WatchRequiredVotes(ctx context.Context) {
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerRequiredVotes)
 
 	// Subscription to the event
 	sub, err := cinst.WatchRequiredVotes(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Eid] {
-				ecache[log.Eid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Eid] {
+				lcache[log.Eid] = true
 
 				// Am I the voted solver?
 				event := managers.GetEvent(log.Eid)
@@ -132,7 +139,7 @@ func WatchRequiredVotes(ctx context.Context) {
 					}
 				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
@@ -144,23 +151,22 @@ func WatchEventSolved(ctx context.Context) {
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerEventSolved)
 
 	// Subscription to the event
 	sub, err := cinst.WatchEventSolved(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Eid] {
-				ecache[log.Eid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Eid] {
+				lcache[log.Eid] = true
 
 				// Am I the event sender and not the event solver?
 				event := managers.GetEvent(log.Eid)
@@ -175,7 +181,51 @@ func WatchEventSolved(ctx context.Context) {
 					}
 				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
+			utils.CheckError(err, utils.WarningMode)
+		}
+	}
+}
+
+// DCR (debug only owner nodes)
+func WatchApplicationRegistered() {
+
+	// Controller smart contract instance
+	cinst := managers.GetControllerInst()
+
+	logs := make(chan *bindings.ControllerApplicationRegistered)
+
+	// Subscription to the event
+	sub, err := cinst.WatchApplicationRegistered(nil, logs)
+	utils.CheckError(err, utils.WarningMode)
+
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
+
+	// Infinite loop
+	for {
+		select {
+		case log := <-logs:
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Appid] {
+				lcache[log.Appid] = true
+
+				// Am I the application owner?
+				app := managers.GetApplication(log.Appid)
+				from := managers.GetFromAccount()
+				if app.Owner == from {
+					// Debug
+					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ApplicationRegistered (APPID=", log.Appid, ")\n")
+
+					// Decode application info
+					var ainfo types.ApplicationInfo
+					utils.UnmarshalJSON(app.Info, &ainfo)
+
+					// ONOS SDN plugin
+					managers.ONOSAddVirtualService(log.Appid, ainfo.Description, ainfo.IP, ainfo.Protocol, ainfo.Port)
+				}
+			}
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
@@ -187,23 +237,22 @@ func WatchContainerRegistered(ctx context.Context) {
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerContainerRegistered)
 
 	// Subscription to the event
 	sub, err := cinst.WatchContainerRegistered(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Rcid] {
-				ecache[log.Rcid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Rcid] {
+				lcache[log.Rcid] = true
 
 				// Am I the container owner?
 				ctr := managers.GetContainer(log.Rcid)
@@ -221,8 +270,9 @@ func WatchContainerRegistered(ctx context.Context) {
 
 						// Autodeploy mode (anonymous function)
 						go func() {
-							managers.NewContainer(ctx, &cinfo, managers.GetContainerName(log.Rcid))
-							managers.ActivateContainer(log.Rcid)
+							managers.NewContainer(ctx, &cinfo, ctr.Appid, log.Rcid, true)
+							err = managers.ActivateContainer(ctx, log.Rcid)
+							utils.CheckError(err, utils.WarningMode)
 						}()
 					} else {
 						// Encapsulate event type
@@ -231,11 +281,14 @@ func WatchContainerRegistered(ctx context.Context) {
 							TroubledResource: types.AllResources,
 						}
 
-						go managers.SendEvent(&etype, log.Rcid, managers.GetState())
+						go func() {
+							err = managers.SendEvent(ctx, &etype, log.Rcid, managers.GetState())
+							utils.CheckError(err, utils.WarningMode)
+						}()
 					}
 				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
@@ -247,45 +300,40 @@ func WatchContainerUpdated(ctx context.Context) {
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerContainerUpdated)
 
 	// Subscription to the event
 	sub, err := cinst.WatchContainerUpdated(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
-
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Rcid] {
-				ecache[log.Rcid] = true
-
+			// TODO: Check if an event log has already been received (repeated rcids)
+			if !log.Raw.Removed {
 				// Am I the container host?
+				ctr := managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
 					// Debug
 					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
 
-					// Get and decode container info
-					ctr := managers.GetContainer(log.Rcid)
+					// Decode container info
 					var cinfo types.ContainerInfo
 					utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 					// TODO: think about which containers fields could be updated by the owner and how
 					go func() { // Anonymous function
-						managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
-						managers.NewContainer(ctx, &cinfo, managers.GetContainerName(log.Rcid))
+						// TODO: manage container ports by cluster node
+						managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, true)
+						managers.NewContainer(ctx, &cinfo, ctr.Appid, log.Rcid, true)
 					}()
 				} else {
 					// Clean container old instances (if exists)
-					go managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
+					go managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, false)
 				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
@@ -297,34 +345,37 @@ func WatchContainerUnregistered(ctx context.Context) {
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
 
-	// Event/log channel
 	logs := make(chan *bindings.ControllerContainerUnregistered)
 
 	// Subscription to the event
 	sub, err := cinst.WatchContainerUnregistered(nil, logs)
 	utils.CheckError(err, utils.WarningMode)
 
-	// Cache to avoid duplicate event logs
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated logs
+	lcache := map[uint64]bool{}
 
 	// Infinite loop
 	for {
 		select {
 		case log := <-logs:
-			// Check if an event log has already been received
-			if !log.Raw.Removed && !ecache[log.Rcid] {
-				ecache[log.Rcid] = true
+			// Check if a log has already been received
+			if !log.Raw.Removed && !lcache[log.Rcid] {
+				lcache[log.Rcid] = true
 
 				// Am I the container host?
+				ctr := managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
 					// Debug
 					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
-				}
 
-				// Clean all container instances (in execution or old instances)
-				go managers.RemoveContainer(ctx, managers.GetContainerName(log.Rcid))
+					// Check if it is unregistering an application and remove container
+					go managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, !managers.IsApplicationUnregistered(ctr.Appid))
+				} else {
+					// Clean container old instances (if exists)
+					go managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, false)
+				}
 			}
-		case err := <-sub.Err():
+		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}

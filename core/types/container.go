@@ -34,13 +34,14 @@ type ContainerInfo struct {
 
 type ContainerType struct {
 	ServiceType serviceType `json:"type"`
-	Impact      uint8       `json:"impact"` // Importance over the entirely system (0-10)
+	Impact      uint8       `json:"impact"` // Importance over the entire system (0-10)
 }
 
 // Abstraction of all container configs
 type ContainerConfig struct {
-	CPULimit uint64      `json:"lcpu"`    // Maximum CPU quota in nano units to use (0 for unlimited)
+	//CPULimit uint64      `json:"lcpu"`    // Maximum CPU quota in nano units to use (0 for unlimited)
 	MemLimit uint64      `json:"lmem"`    // Maximum memory to use in bytes (0 for unlimited)
+	Envs     []string    `json:"envs"`    // Environment variables
 	Volumes  []string    `json:"volumes"` // Binding volumes
 	Ports    nat.PortMap `json:"ports"`   // Binding ports
 }

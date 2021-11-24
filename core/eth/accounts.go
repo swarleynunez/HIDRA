@@ -4,12 +4,11 @@ import (
 	"errors"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/superfog/core/utils"
 )
 
 var (
-	errNotFoundAddr  = errors.New("ethereum address not found in keystore")
+	//errNotFoundAddr  = errors.New("ethereum address not found in keystore")
 	ErrMalformedAddr = errors.New("malformed ethereum address")
 )
 
@@ -27,13 +26,23 @@ func CreateAccount(ks *keystore.KeyStore, passphrase string) (from accounts.Acco
 
 	if err == nil {
 		// Save the created address
-		utils.SetEnvKey("NODE_ADDR", from.Address.String())
+		// TODO: test --> utils.SetEnv("NODE_ADDR", from.Address.String())
 	}
 
 	return
 }
 
-func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.Account) {
+func LoadAccount(ks *keystore.KeyStore, passphrase string) (from accounts.Account) {
+
+	// Unlock the loaded account
+	from = ks.Accounts()[0]
+	err := ks.Unlock(from, passphrase)
+	utils.CheckError(err, utils.FatalMode)
+
+	return
+}
+
+/*func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.Account) {
 
 	if len(ks.Accounts()) == 0 {
 		from = CreateAccount(ks, passphrase)
@@ -60,4 +69,4 @@ func LoadAccount(ks *keystore.KeyStore, addr, passphrase string) (from accounts.
 	utils.CheckError(err, utils.FatalMode)
 
 	return
-}
+}*/

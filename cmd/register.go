@@ -4,27 +4,26 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/swarleynunez/superfog/core/managers"
-	"time"
 )
+
+const registerShortMsg = "Register node in the configured controller smart contract"
 
 var registerCmd = &cobra.Command{
 	Use:                   "register",
-	Short:                 "Register node in the configured controller smart contract",
+	Short:                 registerShortMsg,
+	Long:                  title + "\n\n" + "Info:\n  " + registerShortMsg,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Initialize and configure node
 		managers.InitNode(ctx, false)
 
 		// Register node if it has not done yet
 		if !managers.IsNodeRegistered(managers.GetFromAccount()) {
-			managers.RegisterNode()
+			managers.RegisterNode(ctx)
 
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node registered\n")
+			fmt.Println("--> Node registered")
 		} else {
-			// Debug
-			fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Node is already registered\n")
+			fmt.Println("--> Node is already registered")
 		}
 	},
 }

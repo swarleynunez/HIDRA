@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/utils"
-	"os"
 	"strconv"
 	"time"
 )
@@ -21,21 +20,22 @@ func Run(ctx context.Context) {
 	rccs := map[string]cycle{}
 
 	// Get and parse monitor time interval
-	minter, err := strconv.ParseUint(os.Getenv("MONITOR_INTERVAL"), 10, 64)
+	minter, err := strconv.ParseUint(utils.GetEnv("MONITOR_INTERVAL"), 10, 64)
 	utils.CheckError(err, utils.FatalMode)
 
 	// Get and parse cycle time
-	ctime, err := strconv.ParseUint(os.Getenv("CYCLE_TIME"), 10, 64)
+	ctime, err := strconv.ParseUint(utils.GetEnv("CYCLE_TIME"), 10, 64)
 	utils.CheckError(err, utils.FatalMode)
 
 	// Cache to avoid sending duplicate events
 	ecache := map[uint64]bool{}
 
 	// Watchers to receive events
-	go WatchNewEvent()
-	go WatchRequiredReplies()
+	go WatchNewEvent(ctx)
+	go WatchRequiredReplies(ctx)
 	go WatchRequiredVotes(ctx)
 	go WatchEventSolved(ctx)
+	go WatchApplicationRegistered()
 	go WatchContainerRegistered(ctx)
 	go WatchContainerUpdated(ctx)
 	go WatchContainerUnregistered(ctx)
