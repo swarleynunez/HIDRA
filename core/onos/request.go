@@ -39,12 +39,16 @@ func (cli *Client) Request(rname, body string, params ...uint64) error {
 		if r.Method == "POST" {
 			req.Header.Set("Content-Type", "application/json")
 		}
+		req.Close = true
 
 		// Send request
 		res, err := cli.Client.Do(req)
 		if err != nil {
 			return err
 		}
+
+		// Deferring the response body closure
+		defer res.Body.Close()
 
 		// Check HTTP response status code
 		switch res.StatusCode {

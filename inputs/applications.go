@@ -6,7 +6,7 @@ import (
 )
 
 var AppInfo = types.ApplicationInfo{
-	Description: "POSTGRESQL Database V1.0.0",
+	Description: "NGINX Webserver V1.0.0",
 	IP:          net.ParseIP("170.100.8.33"),
 	Protocol:    "TCP",
 	Port:        80,

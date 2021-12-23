@@ -19,7 +19,14 @@ sshpass -p "pi_node2_eth" scp bin/hidra config/.env pi@192.168.43.12:/home/pi/.e
 COMMAND="cd /home/pi/.ethereum/bin/; \
 nohup ./hidra run > hidra.out 2> hidra.err &"
 sshpass -p "pi_node0_eth" ssh pi@192.168.43.10 "$COMMAND"
+
+COMMAND="cd /home/pi/.ethereum/bin/; \
+sleep 30; \
+nohup ./hidra run > hidra.out 2> hidra.err &"
 sshpass -p "pi_node1_eth" ssh pi@192.168.43.11 "$COMMAND"
+
+COMMAND="cd /home/pi/.ethereum/bin/; \
+nohup ./hidra run > hidra.out 2> hidra.err &"
 sshpass -p "pi_node2_eth" ssh pi@192.168.43.12 "$COMMAND"
 
 ## Get the controller SC address

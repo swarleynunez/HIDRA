@@ -95,7 +95,7 @@ contract Controller {
             );
             require(
                 isApplicationOwner(ctrs[_rcid].appid, msg.sender) ||
-                isContainerHost(_rcid, msg.sender),
+                    isContainerHost(_rcid, msg.sender),
                 "The node is neither the event's container owner nor the host"
             );
             require(
@@ -202,16 +202,6 @@ contract Controller {
                     // Set event solver
                     events[eid].solver = candidateAddr;
 
-                    // Add a new container instance (if applicable)
-                    uint64 rcid = events[eid].rcid;
-                    if (rcid > 0) {
-                        if (!isContainerHost(rcid, candidateAddr)) {
-                            DCR.ContainerInstance memory inst;
-                            inst.host = candidateAddr;
-                            ctrs[rcid].instances.push(inst);
-                        }
-                    }
-
                     emit RequiredVotes(eid);
                 }
 
@@ -242,17 +232,21 @@ contract Controller {
         // Solve event
         events[eid].solvedAt = block.timestamp;
 
-        // Activate container (if applicable)
         uint64 rcid = events[eid].rcid;
         if (rcid > 0) {
-            // Activate application
+            // Add a new container instance (if applicable)
+            if (!isContainerHost(rcid, events[eid].solver)) {
+                DCR.ContainerInstance memory inst;
+                inst.host = events[eid].solver;
+                inst.startedAt = block.timestamp;
+                ctrs[rcid].instances.push(inst);
+            }
+
+            // Activate application (if applicable)
             if (!isApplicationActive(ctrs[rcid].appid))
                 activeApps.push(ctrs[rcid].appid);
 
-            // Set container start time and activate it
-            DCR.ContainerInstance[] storage insts = ctrs[rcid].instances;
-            if (insts[insts.length - 1].startedAt == 0)
-                insts[insts.length - 1].startedAt = block.timestamp;
+            // Activate container (if applicable)
             if (!isContainerActive(rcid)) activeCtrs.push(rcid);
         }
 
@@ -492,12 +486,14 @@ contract Controller {
     }
 
     function unrecordContainer(uint64 rcid) private {
-        ctrs[rcid].unregisteredAt = block.timestamp;
         // Set container removal time
-        popArrayItemById(apps[ctrs[rcid].appid].rcids, rcid);
+        ctrs[rcid].unregisteredAt = block.timestamp;
+
         // Unlink container from its application
-        popArrayItemById(activeCtrs, rcid);
+        popArrayItemById(apps[ctrs[rcid].appid].rcids, rcid);
+
         // Deactivate container
+        popArrayItemById(activeCtrs, rcid);
 
         emit ContainerUnregistered(rcid);
 
@@ -519,25 +515,25 @@ contract Controller {
     // Getters //
     /////////////
     function getEventReplies(uint64 eid)
-    public
-    view
-    returns (DEL.EventReply[] memory)
+        public
+        view
+        returns (DEL.EventReply[] memory)
     {
         return events[eid].replies;
     }
 
     function getApplicationContainers(uint64 appid)
-    public
-    view
-    returns (uint64[] memory)
+        public
+        view
+        returns (uint64[] memory)
     {
         return apps[appid].rcids;
     }
 
     function getContainerInstances(uint64 rcid)
-    public
-    view
-    returns (DCR.ContainerInstance[] memory)
+        public
+        view
+        returns (DCR.ContainerInstance[] memory)
     {
         return ctrs[rcid].instances;
     }
@@ -559,9 +555,9 @@ contract Controller {
     }
 
     function hasNodeReputation(address nodeAddr, int64 reputation)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         Node node = Node(nodes[nodeAddr]);
         // Node instance
@@ -570,9 +566,9 @@ contract Controller {
     }
 
     function hasRequiredCount(uint8 thld, uint64 count)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         uint64 required = (state.nodeCount * thld) / 100;
         if (required > 0 && count >= required) return true;
@@ -580,18 +576,18 @@ contract Controller {
     }
 
     function isApplicationOwner(uint64 appid, address nodeAddr)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         if (apps[appid].owner == nodeAddr) return true;
         return false;
     }
 
     function isContainerHost(uint64 rcid, address nodeAddr)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         DCR.ContainerInstance[] memory insts = ctrs[rcid].instances;
         if (insts.length > 0 && insts[insts.length - 1].host == nodeAddr)
@@ -605,9 +601,9 @@ contract Controller {
     }
 
     function hasAlreadyReplied(uint64 eid, address nodeAddr)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         DEL.EventReply[] memory replies = events[eid].replies;
         for (uint64 i = 0; i < replies.length; i++) {
@@ -618,9 +614,9 @@ contract Controller {
     }
 
     function hasAlreadyVoted(uint64 eid, address nodeAddr)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         DEL.EventReply[] memory replies = events[eid].replies;
         for (uint64 i = 0; i < replies.length; i++) {
@@ -638,9 +634,9 @@ contract Controller {
     }
 
     function canSolveEvent(uint64 eid, address nodeAddr)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         if (events[eid].solver == nodeAddr) return true;
         return false;
@@ -660,9 +656,9 @@ contract Controller {
     }
 
     function isApplicationUnregistered(uint64 appid)
-    public
-    view
-    returns (bool)
+        public
+        view
+        returns (bool)
     {
         if (apps[appid].unregisteredAt != 0) return true;
         return false;

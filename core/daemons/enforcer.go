@@ -24,7 +24,7 @@ var (
 	errNoContainersFound   = errors.New("no containers found")
 )
 
-func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime uint64, ecache map[uint64]bool) {
+func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime uint64, ccache map[uint64]bool) {
 
 	state := managers.GetState()
 
@@ -73,7 +73,7 @@ func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime u
 			rcc.triggers++
 
 			if rcc.measures == ctime/minter && rcc.measures == rcc.triggers {
-				runRuleAction(ctx, &rule, ecache, state, usage)
+				runRuleAction(ctx, &rule, ccache, state, usage)
 			}
 		} else {
 			utils.CheckError(err, utils.WarningMode)
@@ -89,16 +89,15 @@ func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime u
 	}
 }
 
-func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool, state *types.State, usage interface{}) {
+func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool, state *types.State, usage interface{}) {
 
 	switch rule.Action {
 	case types.SendEventAction:
 		rcid, err := selectContainer(ctx)
 		if err == nil {
-			// Check if an event has already been sent for selected container
-			// TODO: change ecache struct and add time intervals (due to the static rcids)
-			if !ecache[rcid] {
-				ecache[rcid] = true
+			// Check if a previous event has already been sent for the selected container
+			if !ccache[rcid] {
+				ccache[rcid] = true
 
 				// Encapsulate event type
 				etype := types.EventType{
@@ -111,12 +110,16 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ecache map[uint64]bool
 
 				go func() {
 					err = managers.SendEvent(ctx, &etype, rcid, state)
-					utils.CheckError(err, utils.WarningMode)
+					if err != nil {
+						ccache[rcid] = false
+						utils.CheckError(err, utils.WarningMode)
+					}
 				}()
 			}
 		}
 		fallthrough
 	case types.ProceedAction:
+		// Execute specific and local stuff
 		if rule.Action == types.ProceedAction { // Due to the fallthrough
 
 		}
@@ -194,20 +197,16 @@ func selectSolver(eid uint64) (addr common.Address) {
 		}
 	}
 
-	// TODO. Debug
-	/*addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
+	// TODO. Testing
+	addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
 	addr2 := common.HexToAddress("0xb066c34E2C26E6E03042Ae4AA11Dfb9A28cd7C52")
-	addr3 := common.HexToAddress("0xa852f9A4f20651e4D6645d5200B5CAef06AFf4fB")
+	//addr3 := common.HexToAddress("0xa852f9A4f20651e4D6645d5200B5CAef06AFf4fB")
 
-	if event.Sender == addr {
-		if addr == addr1 {
-			addr = addr2
-		} else if addr == addr2 {
-			addr = addr3
-		} else if addr == addr3 {
-			addr = addr1
-		}
-	}*/
+	if event.Sender == addr1 {
+		addr = addr2
+	} else if event.Sender == addr2 {
+		addr = addr1
+	}
 
 	return
 }

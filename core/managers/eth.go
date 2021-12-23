@@ -10,6 +10,7 @@ import (
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
+	"time"
 )
 
 // To simulate reputable action execution
@@ -101,36 +102,42 @@ func SendEvent(ctx context.Context, etype *types.EventType, rcid uint64, nstate 
 	limit := getActionLimit(SendEventAction)
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) {
-		// Has the event a linked container?
-		if rcid > 0 {
-			appid := GetContainer(rcid).Appid
-			if !existContainer(rcid) ||
-				(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
-				isContainerAutodeployed(rcid) ||
-				isContainerUnregistered(rcid) {
-				return errors.New(SendEventAction + ": transaction not sent")
+	for {
+		if hasNodeReputation(_from.Address, limit) {
+			// Has the event a linked container?
+			if rcid > 0 {
+				appid := GetContainer(rcid).Appid
+				if !existContainer(rcid) ||
+					(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
+					isContainerAutodeployed(rcid) ||
+					isContainerUnregistered(rcid) {
+					time.Sleep(1 * time.Minute)
+					continue
+					//return errors.New(SendEventAction + ": transaction not sent")
+				}
 			}
-		}
 
-		// Txn data encoding
-		et := utils.MarshalJSON(etype)
-		ns := utils.MarshalJSON(nstate)
+			// Txn data encoding
+			et := utils.MarshalJSON(etype)
+			ns := utils.MarshalJSON(nstate)
 
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			for {
+				// Create and configure a transactor
+				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000001)
 
-			// Send transaction
-			_, err := _cinst.SendEvent(auth, et, rcid, ns)
+				// Send transaction
+				_, err := _cinst.SendEvent(auth, et, rcid, ns)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
+				if errors.Is(err, core.ErrNonceTooLow) {
+					continue
+				}
+				return err
 			}
-			return err
+		} else {
+			time.Sleep(1 * time.Minute)
+			continue
+			//return errors.New(SendEventAction + ": transaction not sent")
 		}
-	} else {
-		return errors.New(SendEventAction + ": transaction not sent")
 	}
 }
 
@@ -139,28 +146,32 @@ func SendReply(ctx context.Context, eid uint64, nstate *types.State) error {
 	limit := getActionLimit(SendReplyAction)
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
-		!isEventSolved(eid) &&
-		!hasAlreadyReplied(eid, _from.Address) {
+	for {
+		if hasNodeReputation(_from.Address, limit) &&
+			existEvent(eid) &&
+			!isEventSolved(eid) &&
+			!hasAlreadyReplied(eid, _from.Address) {
 
-		// Txn data encoding
-		ns := utils.MarshalJSON(nstate)
+			// Txn data encoding
+			ns := utils.MarshalJSON(nstate)
 
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			for {
+				// Create and configure a transactor
+				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000002)
 
-			// Send transaction
-			_, err := _cinst.SendReply(auth, eid, ns)
+				// Send transaction
+				_, err := _cinst.SendReply(auth, eid, ns)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
+				if errors.Is(err, core.ErrNonceTooLow) {
+					continue
+				}
+				return err
 			}
-			return err
+		} else {
+			time.Sleep(1 * time.Minute)
+			continue
+			//return errors.New(SendReplyAction + ": transaction not sent")
 		}
-	} else {
-		return errors.New(SendReplyAction + ": transaction not sent")
 	}
 }
 
@@ -168,30 +179,34 @@ func VoteSolver(ctx context.Context, eid uint64, candAddr common.Address) error 
 
 	limit := getActionLimit(VoteSolverAction)
 	thld := getClusterConfig().NodesThld
-	count := uint64(len(GetEventReplies(eid)))
+	//count := uint64(len(GetEventReplies(eid)))
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
-		!isEventSolved(eid) &&
-		hasRequiredCount(thld, count) &&
-		hasAlreadyReplied(eid, candAddr) &&
-		!hasAlreadyVoted(eid, _from.Address) {
+	for {
+		if hasNodeReputation(_from.Address, limit) &&
+			existEvent(eid) &&
+			!isEventSolved(eid) &&
+			hasRequiredCount(thld, uint64(len(GetEventReplies(eid)))) &&
+			hasAlreadyReplied(eid, candAddr) &&
+			!hasAlreadyVoted(eid, _from.Address) {
 
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			for {
+				// Create and configure a transactor
+				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000003)
 
-			// Send transaction
-			_, err := _cinst.VoteSolver(auth, eid, candAddr)
+				// Send transaction
+				_, err := _cinst.VoteSolver(auth, eid, candAddr)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
+				if errors.Is(err, core.ErrNonceTooLow) {
+					continue
+				}
+				return err
 			}
-			return err
+		} else {
+			time.Sleep(1 * time.Minute)
+			continue
+			//return errors.New(VoteSolverAction + ": transaction not sent")
 		}
-	} else {
-		return errors.New(VoteSolverAction + ": transaction not sent")
 	}
 }
 
@@ -200,25 +215,29 @@ func SolveEvent(ctx context.Context, eid uint64) error {
 	limit := getActionLimit(SolveEventAction)
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
-		!isEventSolved(eid) &&
-		CanSolveEvent(eid, _from.Address) {
+	for {
+		if hasNodeReputation(_from.Address, limit) &&
+			existEvent(eid) &&
+			!isEventSolved(eid) &&
+			canSolveEvent(eid, _from.Address) {
 
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			for {
+				// Create and configure a transactor
+				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000004)
 
-			// Send transaction
-			_, err := _cinst.SolveEvent(auth, eid)
+				// Send transaction
+				_, err := _cinst.SolveEvent(auth, eid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
+				if errors.Is(err, core.ErrNonceTooLow) {
+					continue
+				}
+				return err
 			}
-			return err
+		} else {
+			time.Sleep(1 * time.Minute)
+			continue
+			//return errors.New(SolveEventAction + ": transaction not sent")
 		}
-	} else {
-		return errors.New(SolveEventAction + ": transaction not sent")
 	}
 }
 
@@ -239,7 +258,7 @@ func RegisterApplication(ctx context.Context, ainfo *types.ApplicationInfo, cinf
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000005)
 
 			// Send transaction
 			_, err := _cinst.RegisterApplication(auth, ai, ci, autodeploy)
@@ -269,7 +288,7 @@ func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.Container
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000006)
 
 			// Send transaction
 			_, err := _cinst.RegisterContainer(auth, appid, ci, autodeploy)
@@ -299,7 +318,7 @@ func ActivateContainer(ctx context.Context, rcid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000007)
 
 			// Send transaction
 			_, err := _cinst.ActivateContainer(auth, rcid)
@@ -330,7 +349,7 @@ func UpdateContainerInfo(ctx context.Context, rcid uint64, cinfo *types.Containe
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000008)
 
 			// Send transaction
 			_, err := _cinst.UpdateContainerInfo(auth, rcid, ci)
@@ -359,7 +378,7 @@ func UnregisterApplication(ctx context.Context, appid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000009)
 
 			// Send transaction
 			_, err := _cinst.UnregisterApplication(auth, appid)
@@ -387,7 +406,7 @@ func UnregisterContainer(ctx context.Context, rcid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000010)
 
 			// Send transaction
 			_, err := _cinst.UnregisterContainer(auth, rcid)
@@ -663,7 +682,7 @@ func isEventSolved(eid uint64) (r bool) {
 	return
 }
 
-func CanSolveEvent(eid uint64, addr common.Address) (r bool) {
+func canSolveEvent(eid uint64, addr common.Address) (r bool) {
 
 	r, err := _cinst.CanSolveEvent(&bind.CallOpts{From: _from.Address}, eid, addr)
 	utils.CheckError(err, utils.WarningMode)

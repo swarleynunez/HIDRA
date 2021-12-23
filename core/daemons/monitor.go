@@ -2,7 +2,6 @@ package daemons
 
 import (
 	"context"
-	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/utils"
 	"strconv"
 	"time"
@@ -16,7 +15,7 @@ type cycle struct {
 
 func Run(ctx context.Context) {
 
-	// Rule cycle counters by rule name
+	// Rule cycle counter (rcc) per rule
 	rccs := map[string]cycle{}
 
 	// Get and parse monitor time interval
@@ -27,27 +26,28 @@ func Run(ctx context.Context) {
 	ctime, err := strconv.ParseUint(utils.GetEnv("CYCLE_TIME"), 10, 64)
 	utils.CheckError(err, utils.FatalMode)
 
-	// Cache to avoid sending duplicate events
-	ecache := map[uint64]bool{}
+	// Cache to avoid duplicated events per container
+	ccache := map[uint64]bool{}
 
 	// Watchers to receive events
 	go WatchNewEvent(ctx)
 	go WatchRequiredReplies(ctx)
-	go WatchRequiredVotes(ctx)
-	go WatchEventSolved(ctx)
+	go WatchRequiredVotes(ctx, ccache)
+	go WatchEventSolved(ctx, ccache)
 	go WatchApplicationRegistered()
 	go WatchContainerRegistered(ctx)
 	go WatchContainerUpdated(ctx)
 	go WatchContainerUnregistered(ctx)
 
+	// TODO: check node/Docker running ports (also check registered ports in DCR)
 	// Recover node state from distributed registry
-	managers.InitNodeState(ctx)
+	//managers.InitNodeState(ctx)
 
 	// Main loop
 	for {
 		time.Sleep(time.Duration(minter) * time.Millisecond)
 
 		// Check all state rules
-		checkStateRules(ctx, rccs, minter, ctime, ecache)
+		checkStateRules(ctx, rccs, minter, ctime, ccache)
 	}
 }

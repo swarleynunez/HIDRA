@@ -1,5 +1,6 @@
 package types
 
+// TODO: add a task to execute by the enforcer
 type Rule struct {
 	NameId     string // Unique
 	Resource   resource
@@ -35,9 +36,9 @@ const (
 type action uint8
 
 const (
-	IgnoreAction    action = iota
-	WarnAction             // Msg to stdout
-	LogAction              // Msg to log file
-	ProceedAction          // Execute a task
-	SendEventAction        // Ask for cluster help
+	IgnoreAction    action = iota // Do nothing
+	WarnAction                    // Msg to stdout
+	LogAction                     // Msg to log file
+	ProceedAction                 // Execute something locally
+	SendEventAction               // Ask for cluster help
 )

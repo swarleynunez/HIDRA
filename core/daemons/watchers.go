@@ -99,8 +99,8 @@ func WatchRequiredReplies(ctx context.Context) {
 	}
 }
 
-// DEL (debug: only solver nodes)
-func WatchRequiredVotes(ctx context.Context) {
+// DEL (debug: all cluster nodes)
+func WatchRequiredVotes(ctx context.Context, ccache map[uint64]bool) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -122,12 +122,17 @@ func WatchRequiredVotes(ctx context.Context) {
 			if !log.Raw.Removed && !lcache[log.Eid] {
 				lcache[log.Eid] = true
 
-				// Am I the voted solver?
+				// Debug
 				event := managers.GetEvent(log.Eid)
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.Eid, ", Solver=", event.Solver.String(), ")\n")
+
+				// Am I the voted solver?
 				from := managers.GetFromAccount()
 				if event.Solver == from {
-					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.Eid, ")\n")
+					// Update container cache
+					if event.Rcid > 0 {
+						ccache[event.Rcid] = true
+					}
 
 					// Am I the event sender?
 					if event.Sender != from {
@@ -145,8 +150,8 @@ func WatchRequiredVotes(ctx context.Context) {
 	}
 }
 
-// DEL (debug only sender nodes)
-func WatchEventSolved(ctx context.Context) {
+// DEL (debug: all cluster nodes)
+func WatchEventSolved(ctx context.Context, ccache map[uint64]bool) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -168,16 +173,23 @@ func WatchEventSolved(ctx context.Context) {
 			if !log.Raw.Removed && !lcache[log.Eid] {
 				lcache[log.Eid] = true
 
+				// Debug
+				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.Eid, ")\n")
+
 				// Am I the event sender and not the event solver?
 				event := managers.GetEvent(log.Eid)
 				from := managers.GetFromAccount()
 				if event.Sender == from {
-					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.Eid, ")\n")
-
 					if event.Solver != from {
 						// Execute required ending task (depends on the event type)
 						go managers.RunEventEndingTask(ctx, event)
+					}
+				}
+
+				// Update container cache
+				if event.Sender == from || event.Solver == from {
+					if event.Rcid > 0 {
+						ccache[event.Rcid] = false
 					}
 				}
 			}
@@ -187,7 +199,7 @@ func WatchEventSolved(ctx context.Context) {
 	}
 }
 
-// DCR (debug only owner nodes)
+// DCR (debug: only owner nodes)
 func WatchApplicationRegistered() {
 
 	// Controller smart contract instance
@@ -231,7 +243,7 @@ func WatchApplicationRegistered() {
 	}
 }
 
-// DCR (debug only owner nodes)
+// DCR (debug: only owner nodes)
 func WatchContainerRegistered(ctx context.Context) {
 
 	// Controller smart contract instance
@@ -294,7 +306,7 @@ func WatchContainerRegistered(ctx context.Context) {
 	}
 }
 
-// DCR (debug only host nodes)
+// DCR (debug: only host nodes)
 func WatchContainerUpdated(ctx context.Context) {
 
 	// Controller smart contract instance
@@ -339,7 +351,7 @@ func WatchContainerUpdated(ctx context.Context) {
 	}
 }
 
-// DCR (debug only host nodes)
+// DCR (debug: only host nodes)
 func WatchContainerUnregistered(ctx context.Context) {
 
 	// Controller smart contract instance

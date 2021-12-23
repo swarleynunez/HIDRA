@@ -12,7 +12,7 @@ library DCR {
     }
 
     struct Container {
-        uint64 appid; // Application identificator
+        uint64 appid; // Application identifier
         string info; // Encoded
         bool autodeployed;
         ContainerInstance[] instances;

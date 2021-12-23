@@ -137,7 +137,7 @@ func removeDockerContainer(ctx context.Context, cname string) {
 
 	// TODO. Backup tasks. Improve flow
 	// commit --> create an image from a container (snapshot preserving rw)
-	// save, load --> compress and uncompress images (tar or stdin/stdout)
+	// save, load --> compress and decompress images (tar or stdin/stdout)
 	// volumes --> manual backup or using --volumes-from (temporal container)
 }*/
 
@@ -210,9 +210,9 @@ func isPortAllocatedByDocker(ctx context.Context, port string) bool {
 // Get mapped port information of a container
 func getContainerPortInfo(ctx context.Context, cname string) (*dockertypes.Port, error) {
 
-	c := SearchDockerContainers(ctx, "name", cname, true)
+	c := SearchDockerContainers(ctx, "name", cname, false)
 	if c != nil {
-		// TODO: just look for the first mapped port
+		// TODO: just looking for the first mapped port...
 		return &c[0].Ports[0], nil
 	}
 

@@ -115,6 +115,26 @@ func InitNode(ctx context.Context, deploying bool) {
 
 	// Connect to a cluster ONOS controller
 	_onosc = onos.Connect()
+
+	// Debug
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+			for {
+				// Create and configure a transaction
+				tx := eth.SignedEtherTransaction(ctx, _ethc, _ks, _from, "12345678", common.HexToAddress("0x22dbCF83D13a84C53893903189Ee33d1115C0259"), 0)
+
+				// Send transaction
+				err := _ethc.SendTransaction(ctx, tx)
+
+				if err != nil {
+					continue
+				} else {
+					break
+				}
+			}
+		}
+	}()
 }
 
 func InitNodeState(ctx context.Context) {
@@ -377,7 +397,7 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 ///////////
 // Tasks //
 ///////////
-// sdnaction: require ONOS SDN additional actions?
+// onosaction: require ONOS SDN additional actions?
 func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid uint64, onosaction bool) {
 
 	// Does the container exist locally?
@@ -395,7 +415,7 @@ func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid u
 	}
 
 	// TODO: integrate Docker HEALTHCHECK
-	time.Sleep(5 * time.Second)
+	time.Sleep(7 * time.Second)
 
 	// ONOS SDN plugin
 	if onosaction {
