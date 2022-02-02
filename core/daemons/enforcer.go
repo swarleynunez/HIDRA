@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	yellowWarnFormat = "\033[1;33m[%s] %s (Limit: %v, Usage: %v)\033[0m\n"
-	//yellowWarnFormat = "[%s] %s (Limit: %v, Usage: %v)\n"
+	blueInfoFormat = "\033[1;34m[%d] %s (Limit: %v, Usage: %v)\033[0m\n"
 )
 
 var (
@@ -93,29 +92,26 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 
 	switch rule.Action {
 	case types.SendEventAction:
-		rcid, err := selectContainer(ctx)
+		rcid, err := selectContainer(ctx, ccache)
 		if err == nil {
-			// Check if a previous event has already been sent for the selected container
-			if !ccache[rcid] {
-				ccache[rcid] = true
+			ccache[rcid] = true
 
-				// Encapsulate event type
-				etype := types.EventType{
-					RequiredTask:     types.MigrateContainerTask,
-					TroubledResource: rule.Resource,
-				}
-
-				// Debug
-				//fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Sending an event...\n")
-
-				go func() {
-					err = managers.SendEvent(ctx, &etype, rcid, state)
-					if err != nil {
-						ccache[rcid] = false
-						utils.CheckError(err, utils.WarningMode)
-					}
-				}()
+			// Encapsulate event type
+			etype := types.EventType{
+				RequiredTask:     types.MigrateContainerTask,
+				TroubledResource: rule.Resource,
 			}
+
+			// Debug
+			//fmt.Print("[", time.Now().UnixMilli(), "] ", "Sending an event...\n")
+
+			go func() {
+				err = managers.SendEvent(ctx, &etype, rcid, state)
+				if err != nil {
+					ccache[rcid] = false
+					utils.CheckError(err, utils.WarningMode)
+				}
+			}()
 		}
 		fallthrough
 	case types.ProceedAction:
@@ -128,7 +124,7 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 		// Save log into a file, send log to a remote server...
 		fallthrough
 	case types.WarnAction:
-		fmt.Printf(yellowWarnFormat, time.Now().Format("15:04:05.000000"), rule.Msg, rule.Limit, usage)
+		fmt.Printf(blueInfoFormat, time.Now().UnixMilli(), rule.Msg, rule.Limit, usage)
 	case types.IgnoreAction:
 		// Do nothing
 	default:
@@ -212,17 +208,17 @@ func selectSolver(eid uint64) (addr common.Address) {
 }
 
 // Select a container according to its config and spec usage
-func selectContainer(ctx context.Context) (uint64, error) {
+func selectContainer(ctx context.Context, ccache map[uint64]bool) (uint64, error) {
 
 	// Get distributed registry active containers
 	ctrs := managers.GetActiveContainers()
 	for rcid := range ctrs {
-		// Am I the host?
-		if managers.IsContainerHost(rcid, managers.GetFromAccount()) {
+		// Check if am I the host and if a previous event has already been sent for the container
+		if managers.IsContainerHost(rcid, managers.GetFromAccount()) && !ccache[rcid] {
 			cname := managers.GetContainerName(rcid)
 			c := managers.SearchDockerContainers(ctx, "name", cname, true)
 			if c != nil {
-				// TODO: implement container selector
+				// TODO: implement container selector (next container?)
 				return rcid, nil
 			}
 		}

@@ -37,9 +37,9 @@ func WatchNewEvent(ctx context.Context) {
 				// Debug
 				event := managers.GetEvent(log.Eid)
 				if event.Rcid > 0 {
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
 				} else {
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
 				}
 
 				// Am I the event sender?
@@ -82,7 +82,7 @@ func WatchRequiredReplies(ctx context.Context) {
 				lcache[log.Eid] = true
 
 				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
 
 				// Select and vote an event solver
 				solver := selectSolver(log.Eid)
@@ -124,7 +124,7 @@ func WatchRequiredVotes(ctx context.Context, ccache map[uint64]bool) {
 
 				// Debug
 				event := managers.GetEvent(log.Eid)
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "RequiredVotes (EID=", log.Eid, ", Solver=", event.Solver.String(), ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "RequiredVotes (EID=", log.Eid, ", Solver=", event.Solver.String(), ")\n")
 
 				// Am I the voted solver?
 				from := managers.GetFromAccount()
@@ -174,7 +174,7 @@ func WatchEventSolved(ctx context.Context, ccache map[uint64]bool) {
 				lcache[log.Eid] = true
 
 				// Debug
-				fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "EventSolved (EID=", log.Eid, ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "EventSolved (EID=", log.Eid, ")\n")
 
 				// Am I the event sender and not the event solver?
 				event := managers.GetEvent(log.Eid)
@@ -227,7 +227,7 @@ func WatchApplicationRegistered() {
 				from := managers.GetFromAccount()
 				if app.Owner == from {
 					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ApplicationRegistered (APPID=", log.Appid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ApplicationRegistered (APPID=", log.Appid, ")\n")
 
 					// Decode application info
 					var ainfo types.ApplicationInfo
@@ -272,7 +272,7 @@ func WatchContainerRegistered(ctx context.Context) {
 				from := managers.GetFromAccount()
 				if owner == from {
 					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerRegistered (RCID=", log.Rcid, ", APPID=", ctr.Appid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerRegistered (RCID=", log.Rcid, ", APPID=", ctr.Appid, ")\n")
 
 					// Am I the container host?
 					if managers.IsContainerHost(log.Rcid, from) {
@@ -328,7 +328,7 @@ func WatchContainerUpdated(ctx context.Context) {
 				ctr := managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
 					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
 
 					// Decode container info
 					var cinfo types.ContainerInfo
@@ -378,7 +378,7 @@ func WatchContainerUnregistered(ctx context.Context) {
 				ctr := managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
 					// Debug
-					fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
 
 					// Check if it is unregistering an application and remove container
 					go managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, !managers.IsApplicationUnregistered(ctr.Appid))

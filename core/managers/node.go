@@ -97,7 +97,7 @@ func InitNode(ctx context.Context, deploying bool) {
 	_from = eth.LoadAccount(_ks, pass)
 
 	// Debug
-	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded account: "+_from.Address.String(), "\n")
+	fmt.Print("[", time.Now().UnixMilli(), "] ", "Loaded account: "+_from.Address.String(), "\n")
 
 	_pmutex = &sync.Mutex{} // Mutex to synchronize access to network ports
 
@@ -107,7 +107,7 @@ func InitNode(ctx context.Context, deploying bool) {
 		_finst = faucetInstance(getFaucetContract())
 
 		// Debug
-		fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
+		fmt.Print("[", time.Now().UnixMilli(), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
 	}
 
 	// Connect to the Docker local node
@@ -117,9 +117,9 @@ func InitNode(ctx context.Context, deploying bool) {
 	_onosc = onos.Connect()
 
 	// Debug
-	go func() {
+	/*go func() {
 		for {
-			time.Sleep(1 * time.Minute)
+			time.Sleep(3 * time.Minute)
 			for {
 				// Create and configure a transaction
 				tx := eth.SignedEtherTransaction(ctx, _ethc, _ks, _from, "12345678", common.HexToAddress("0x22dbCF83D13a84C53893903189Ee33d1115C0259"), 0)
@@ -134,7 +134,7 @@ func InitNode(ctx context.Context, deploying bool) {
 				}
 			}
 		}
-	}()
+	}()*/
 }
 
 func InitNodeState(ctx context.Context) {
@@ -415,7 +415,7 @@ func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid u
 	}
 
 	// TODO: integrate Docker HEALTHCHECK
-	time.Sleep(7 * time.Second)
+	//time.Sleep(5 * time.Second)
 
 	// ONOS SDN plugin
 	if onosaction {

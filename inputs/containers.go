@@ -14,7 +14,7 @@ var CtrInfo = types.ContainerInfo{
 	},
 	ContainerConfig: types.ContainerConfig{
 		//CPULimit: 1 * 1e9,
-		MemLimit: 512 * 1024 * 1024,
+		MemLimit: 1024 * 1024 * 1024,
 		//Envs:     []string{"POSTGRES_USER=hidra", "POSTGRES_PASSWORD=1234"},
 		/*Volumes: []string{
 			"nextcloud-vol:/nextcloud-vol",

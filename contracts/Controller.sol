@@ -21,6 +21,7 @@ contract Controller {
 
     // Event list
     mapping(uint64 => DEL.Event) public events;
+    uint64[] private currentEvents;
 
     // Application and container registries
     mapping(uint64 => DCR.Application) public apps;
@@ -82,6 +83,9 @@ contract Controller {
             ),
             "The node has not enough reputation"
         );
+
+        // Update current cluster events
+        currentEvents.push(state.nextEventId);
 
         // Create a new event
         events[state.nextEventId].eType = _eType;
@@ -189,15 +193,13 @@ contract Controller {
             "The node has already voted a solver"
         );
 
-        DEL.EventReply[] memory replies = events[eid].replies;
-
         // Search candidate
-        for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].replier == candidateAddr) {
+        for (uint64 i = 0; i < events[eid].replies.length; i++) {
+            if (events[eid].replies[i].replier == candidateAddr) {
                 // Vote candidate
                 events[eid].replies[i].voters.push(msg.sender);
 
-                uint64 votes = uint64(replies[i].voters.length + 1);
+                uint64 votes = uint64(events[eid].replies[i].voters.length + 1);
                 if (hasRequiredCount(config.votesThld, votes)) {
                     // Set event solver
                     events[eid].solver = candidateAddr;
@@ -249,6 +251,9 @@ contract Controller {
             // Activate container (if applicable)
             if (!isContainerActive(rcid)) activeCtrs.push(rcid);
         }
+
+        // Update current cluster events
+        popArrayItemById(currentEvents, eid);
 
         emit EventSolved(eid);
 
@@ -374,6 +379,10 @@ contract Controller {
             "The node is not the container owner"
         );
         require(
+            !isContainerInCurrentEvent(rcid),
+            "The container is being managed by the cluster"
+        );
+        require(
             !isContainerUnregistered(rcid),
             "The container was unregistered"
         );
@@ -409,10 +418,8 @@ contract Controller {
         apps[appid].unregisteredAt = block.timestamp;
         popArrayItemById(activeApps, appid);
 
-        uint64[] memory rcids = apps[appid].rcids;
-
         // Unregister all application containers
-        for (uint64 i = 0; i < rcids.length; i++) {
+        for (uint64 i = 0; i < apps[appid].rcids.length; i++) {
             require(
                 hasNodeReputation(
                     msg.sender,
@@ -420,8 +427,12 @@ contract Controller {
                 ),
                 "The node has not enough reputation"
             );
+            require(
+                !isContainerInCurrentEvent(apps[appid].rcids[i]),
+                "An application's container is being managed by the cluster"
+            );
 
-            unrecordContainer(rcids[i]);
+            unrecordContainer(apps[appid].rcids[i]);
         }
 
         // Update the sender reputation
@@ -441,6 +452,10 @@ contract Controller {
         require(
             isApplicationOwner(ctrs[rcid].appid, msg.sender),
             "The node is not the container owner"
+        );
+        require(
+            !isContainerInCurrentEvent(rcid),
+            "The container is being managed by the cluster"
         );
         require(
             !isContainerUnregistered(rcid),
@@ -589,8 +604,8 @@ contract Controller {
         view
         returns (bool)
     {
-        DCR.ContainerInstance[] memory insts = ctrs[rcid].instances;
-        if (insts.length > 0 && insts[insts.length - 1].host == nodeAddr)
+        uint256 length = ctrs[rcid].instances.length;
+        if (length > 0 && ctrs[rcid].instances[length - 1].host == nodeAddr)
             return true;
         return false;
     }
@@ -605,9 +620,8 @@ contract Controller {
         view
         returns (bool)
     {
-        DEL.EventReply[] memory replies = events[eid].replies;
-        for (uint64 i = 0; i < replies.length; i++) {
-            if (replies[i].replier == nodeAddr) return true;
+        for (uint64 i = 0; i < events[eid].replies.length; i++) {
+            if (events[eid].replies[i].replier == nodeAddr) return true;
         }
 
         return false;
@@ -618,10 +632,9 @@ contract Controller {
         view
         returns (bool)
     {
-        DEL.EventReply[] memory replies = events[eid].replies;
-        for (uint64 i = 0; i < replies.length; i++) {
-            for (uint64 j = 0; j < replies[i].voters.length; j++) {
-                if (replies[i].voters[j] == nodeAddr) return true;
+        for (uint64 i = 0; i < events[eid].replies.length; i++) {
+            for (uint64 j = 0; j < events[eid].replies[i].voters.length; j++) {
+                if (events[eid].replies[i].voters[j] == nodeAddr) return true;
             }
         }
 
@@ -670,11 +683,10 @@ contract Controller {
     }
 
     function isContainerAutodeployed(uint64 rcid) public view returns (bool) {
-        DCR.ContainerInstance[] memory insts = ctrs[rcid].instances;
         if (
             ctrs[rcid].autodeployed &&
-            insts.length == 1 &&
-            insts[0].startedAt == 0
+            ctrs[rcid].instances.length == 1 &&
+            ctrs[rcid].instances[0].startedAt == 0
         ) return true;
         return false;
     }
@@ -682,6 +694,14 @@ contract Controller {
     function isContainerActive(uint64 rcid) public view returns (bool) {
         for (uint64 i = 0; i < activeCtrs.length; i++) {
             if (activeCtrs[i] == rcid) return true;
+        }
+
+        return false;
+    }
+
+    function isContainerInCurrentEvent(uint64 rcid) public view returns (bool) {
+        for (uint64 i = 0; i < currentEvents.length; i++) {
+            if (events[currentEvents[i]].rcid == rcid) return true;
         }
 
         return false;

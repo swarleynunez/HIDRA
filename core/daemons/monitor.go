@@ -2,6 +2,7 @@ package daemons
 
 import (
 	"context"
+	"github.com/swarleynunez/superfog/core/managers"
 	"github.com/swarleynunez/superfog/core/utils"
 	"strconv"
 	"time"
@@ -41,7 +42,7 @@ func Run(ctx context.Context) {
 
 	// TODO: check node/Docker running ports (also check registered ports in DCR)
 	// Recover node state from distributed registry
-	//managers.InitNodeState(ctx)
+	managers.InitNodeState(ctx)
 
 	// Main loop
 	for {

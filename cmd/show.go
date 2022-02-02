@@ -44,7 +44,7 @@ var showCmd = &cobra.Command{
 			fmt.Println("    REGISTERED:", app.RegisteredAt)
 
 			// Print application's containers
-			ctrs := managers.GetApplicationContainers(appid)
+			ctrs := managers.GetApplicationContainersData(appid)
 			for rcid, ctr := range ctrs {
 				// Get container host
 				insts := managers.GetContainerInstances(rcid)

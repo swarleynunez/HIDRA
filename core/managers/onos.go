@@ -2,7 +2,6 @@ package managers
 
 import (
 	"context"
-	"fmt"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
 	"net"
@@ -78,9 +77,6 @@ func ONOSAddVSInstance(ctx context.Context, appid, rcid uint64, nip net.IP) {
 
 		err = _onosc.Request("inst_add", utils.MarshalJSON(inst), appid)
 		utils.CheckError(err, utils.WarningMode)
-	} else {
-		// Debug
-		fmt.Println("	CONTAINERS --> ", SearchDockerContainers(ctx, "", "", true))
 	}
 }
 

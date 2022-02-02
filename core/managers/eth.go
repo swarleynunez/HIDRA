@@ -10,7 +10,6 @@ import (
 	"github.com/swarleynunez/superfog/core/eth"
 	"github.com/swarleynunez/superfog/core/types"
 	"github.com/swarleynunez/superfog/core/utils"
-	"time"
 )
 
 // To simulate reputable action execution
@@ -81,7 +80,7 @@ func RegisterNode(ctx context.Context) {
 
 	for {
 		// Create and configure a transactor
-		auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000000)
+		auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900000)
 
 		// Send transaction
 		_, err := _cinst.RegisterNode(auth, specs)
@@ -102,42 +101,36 @@ func SendEvent(ctx context.Context, etype *types.EventType, rcid uint64, nstate 
 	limit := getActionLimit(SendEventAction)
 
 	// Checking zone
-	for {
-		if hasNodeReputation(_from.Address, limit) {
-			// Has the event a linked container?
-			if rcid > 0 {
-				appid := GetContainer(rcid).Appid
-				if !existContainer(rcid) ||
-					(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
-					isContainerAutodeployed(rcid) ||
-					isContainerUnregistered(rcid) {
-					time.Sleep(1 * time.Minute)
-					continue
-					//return errors.New(SendEventAction + ": transaction not sent")
-				}
+	if hasNodeReputation(_from.Address, limit) {
+		// Has the event a linked container?
+		if rcid > 0 {
+			appid := GetContainer(rcid).Appid
+			if !existContainer(rcid) ||
+				(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
+				isContainerAutodeployed(rcid) ||
+				isContainerUnregistered(rcid) {
+				return errors.New(SendEventAction + ": transaction not sent")
 			}
-
-			// Txn data encoding
-			et := utils.MarshalJSON(etype)
-			ns := utils.MarshalJSON(nstate)
-
-			for {
-				// Create and configure a transactor
-				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000001)
-
-				// Send transaction
-				_, err := _cinst.SendEvent(auth, et, rcid, ns)
-
-				if errors.Is(err, core.ErrNonceTooLow) {
-					continue
-				}
-				return err
-			}
-		} else {
-			time.Sleep(1 * time.Minute)
-			continue
-			//return errors.New(SendEventAction + ": transaction not sent")
 		}
+
+		// Txn data encoding
+		et := utils.MarshalJSON(etype)
+		ns := utils.MarshalJSON(nstate)
+
+		for {
+			// Create and configure a transactor
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900001)
+
+			// Send transaction
+			_, err := _cinst.SendEvent(auth, et, rcid, ns)
+
+			if errors.Is(err, core.ErrNonceTooLow) {
+				continue
+			}
+			return err
+		}
+	} else {
+		return errors.New(SendEventAction + ": transaction not sent")
 	}
 }
 
@@ -146,32 +139,28 @@ func SendReply(ctx context.Context, eid uint64, nstate *types.State) error {
 	limit := getActionLimit(SendReplyAction)
 
 	// Checking zone
-	for {
-		if hasNodeReputation(_from.Address, limit) &&
-			existEvent(eid) &&
-			!isEventSolved(eid) &&
-			!hasAlreadyReplied(eid, _from.Address) {
+	if hasNodeReputation(_from.Address, limit) &&
+		existEvent(eid) &&
+		!isEventSolved(eid) &&
+		!hasAlreadyReplied(eid, _from.Address) {
 
-			// Txn data encoding
-			ns := utils.MarshalJSON(nstate)
+		// Txn data encoding
+		ns := utils.MarshalJSON(nstate)
 
-			for {
-				// Create and configure a transactor
-				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000002)
+		for {
+			// Create and configure a transactor
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900002)
 
-				// Send transaction
-				_, err := _cinst.SendReply(auth, eid, ns)
+			// Send transaction
+			_, err := _cinst.SendReply(auth, eid, ns)
 
-				if errors.Is(err, core.ErrNonceTooLow) {
-					continue
-				}
-				return err
+			if errors.Is(err, core.ErrNonceTooLow) {
+				continue
 			}
-		} else {
-			time.Sleep(1 * time.Minute)
-			continue
-			//return errors.New(SendReplyAction + ": transaction not sent")
+			return err
 		}
+	} else {
+		return errors.New(SendReplyAction + ": transaction not sent")
 	}
 }
 
@@ -179,34 +168,30 @@ func VoteSolver(ctx context.Context, eid uint64, candAddr common.Address) error 
 
 	limit := getActionLimit(VoteSolverAction)
 	thld := getClusterConfig().NodesThld
-	//count := uint64(len(GetEventReplies(eid)))
+	count := uint64(len(GetEventReplies(eid)))
 
 	// Checking zone
-	for {
-		if hasNodeReputation(_from.Address, limit) &&
-			existEvent(eid) &&
-			!isEventSolved(eid) &&
-			hasRequiredCount(thld, uint64(len(GetEventReplies(eid)))) &&
-			hasAlreadyReplied(eid, candAddr) &&
-			!hasAlreadyVoted(eid, _from.Address) {
+	if hasNodeReputation(_from.Address, limit) &&
+		existEvent(eid) &&
+		!isEventSolved(eid) &&
+		hasRequiredCount(thld, count) &&
+		hasAlreadyReplied(eid, candAddr) &&
+		!hasAlreadyVoted(eid, _from.Address) {
 
-			for {
-				// Create and configure a transactor
-				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000003)
+		for {
+			// Create and configure a transactor
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900003)
 
-				// Send transaction
-				_, err := _cinst.VoteSolver(auth, eid, candAddr)
+			// Send transaction
+			_, err := _cinst.VoteSolver(auth, eid, candAddr)
 
-				if errors.Is(err, core.ErrNonceTooLow) {
-					continue
-				}
-				return err
+			if errors.Is(err, core.ErrNonceTooLow) {
+				continue
 			}
-		} else {
-			time.Sleep(1 * time.Minute)
-			continue
-			//return errors.New(VoteSolverAction + ": transaction not sent")
+			return err
 		}
+	} else {
+		return errors.New(VoteSolverAction + ": transaction not sent")
 	}
 }
 
@@ -215,29 +200,25 @@ func SolveEvent(ctx context.Context, eid uint64) error {
 	limit := getActionLimit(SolveEventAction)
 
 	// Checking zone
-	for {
-		if hasNodeReputation(_from.Address, limit) &&
-			existEvent(eid) &&
-			!isEventSolved(eid) &&
-			canSolveEvent(eid, _from.Address) {
+	if hasNodeReputation(_from.Address, limit) &&
+		existEvent(eid) &&
+		!isEventSolved(eid) &&
+		canSolveEvent(eid, _from.Address) {
 
-			for {
-				// Create and configure a transactor
-				auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000004)
+		for {
+			// Create and configure a transactor
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900004)
 
-				// Send transaction
-				_, err := _cinst.SolveEvent(auth, eid)
+			// Send transaction
+			_, err := _cinst.SolveEvent(auth, eid)
 
-				if errors.Is(err, core.ErrNonceTooLow) {
-					continue
-				}
-				return err
+			if errors.Is(err, core.ErrNonceTooLow) {
+				continue
 			}
-		} else {
-			time.Sleep(1 * time.Minute)
-			continue
-			//return errors.New(SolveEventAction + ": transaction not sent")
+			return err
 		}
+	} else {
+		return errors.New(SolveEventAction + ": transaction not sent")
 	}
 }
 
@@ -258,7 +239,7 @@ func RegisterApplication(ctx context.Context, ainfo *types.ApplicationInfo, cinf
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000005)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900005)
 
 			// Send transaction
 			_, err := _cinst.RegisterApplication(auth, ai, ci, autodeploy)
@@ -288,7 +269,7 @@ func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.Container
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000006)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900006)
 
 			// Send transaction
 			_, err := _cinst.RegisterContainer(auth, appid, ci, autodeploy)
@@ -318,7 +299,7 @@ func ActivateContainer(ctx context.Context, rcid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000007)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900007)
 
 			// Send transaction
 			_, err := _cinst.ActivateContainer(auth, rcid)
@@ -342,6 +323,7 @@ func UpdateContainerInfo(ctx context.Context, rcid uint64, cinfo *types.Containe
 	if hasNodeReputation(_from.Address, limit) &&
 		existContainer(rcid) &&
 		isApplicationOwner(appid, _from.Address) &&
+		!isContainerInCurrentEvent(rcid) &&
 		!isContainerUnregistered(rcid) {
 
 		// Txn data encoding
@@ -349,7 +331,7 @@ func UpdateContainerInfo(ctx context.Context, rcid uint64, cinfo *types.Containe
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000008)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900008)
 
 			// Send transaction
 			_, err := _cinst.UpdateContainerInfo(auth, rcid, ci)
@@ -366,19 +348,24 @@ func UpdateContainerInfo(ctx context.Context, rcid uint64, cinfo *types.Containe
 
 func UnregisterApplication(ctx context.Context, appid uint64) error {
 
-	// To simulate reputation
-	count := len(GetApplicationContainers(appid))
-	actions := []RepAction{{UnregisterAppAction, 1}, {UnregisterCtrAction, count}}
+	ctrs := GetApplicationContainers(appid)
+	actions := []RepAction{{UnregisterAppAction, 1}, {UnregisterCtrAction, len(ctrs)}}
 
 	// Checking zone
 	if hasEstimatedReputation(_from.Address, actions) &&
 		existApplication(appid) &&
 		isApplicationOwner(appid, _from.Address) &&
 		!IsApplicationUnregistered(appid) {
+		// Has the application a container that is currently being managed?
+		for _, ctr := range ctrs {
+			if isContainerInCurrentEvent(ctr) {
+				return errors.New(UnregisterAppAction + ": transaction not sent")
+			}
+		}
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000009)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900009)
 
 			// Send transaction
 			_, err := _cinst.UnregisterApplication(auth, appid)
@@ -402,11 +389,12 @@ func UnregisterContainer(ctx context.Context, rcid uint64) error {
 	if hasNodeReputation(_from.Address, limit) &&
 		existContainer(rcid) &&
 		isApplicationOwner(appid, _from.Address) &&
+		!isContainerInCurrentEvent(rcid) &&
 		!isContainerUnregistered(rcid) {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 5000010)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900010)
 
 			// Send transaction
 			_, err := _cinst.UnregisterContainer(auth, rcid)
@@ -558,7 +546,15 @@ func GetActiveApplications() map[uint64]*types.Application {
 	return apps
 }
 
-func GetApplicationContainers(appid uint64) map[uint64]*types.Container {
+func GetApplicationContainers(appid uint64) (ctrs []uint64) {
+
+	ctrs, err := _cinst.GetApplicationContainers(&bind.CallOpts{From: _from.Address}, appid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func GetApplicationContainersData(appid uint64) map[uint64]*types.Container {
 
 	ac, err := _cinst.GetApplicationContainers(&bind.CallOpts{From: _from.Address}, appid)
 	utils.CheckError(err, utils.WarningMode)
@@ -733,6 +729,14 @@ func isContainerAutodeployed(rcid uint64) (r bool) {
 func isContainerActive(rcid uint64) (r bool) {
 
 	r, err := _cinst.IsContainerActive(&bind.CallOpts{From: _from.Address}, rcid)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func isContainerInCurrentEvent(rcid uint64) (r bool) {
+
+	r, err := _cinst.IsContainerInCurrentEvent(&bind.CallOpts{From: _from.Address}, rcid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return

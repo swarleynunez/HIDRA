@@ -53,7 +53,7 @@ func existImageLocally(ctx context.Context, imgTag string) bool {
 func pullImage(ctx context.Context, imgTag string) {
 
 	// Debug
-	fmt.Print("[", time.Now().Format("15:04:05.000000"), "] ", "Downloading '"+imgTag+"' image...\n")
+	fmt.Print("[", time.Now().UnixMilli(), "] ", "Downloading '"+imgTag+"' image...\n")
 
 	out, err := _docc.ImagePull(ctx, imgTag, dockertypes.ImagePullOptions{})
 	utils.CheckError(err, utils.WarningMode)
