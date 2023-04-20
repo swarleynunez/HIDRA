@@ -6,10 +6,10 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/swarleynunez/superfog/core/bindings"
-	"github.com/swarleynunez/superfog/core/eth"
-	"github.com/swarleynunez/superfog/core/types"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/bindings"
+	"github.com/swarleynunez/hidra/core/eth"
+	"github.com/swarleynunez/hidra/core/types"
+	"github.com/swarleynunez/hidra/core/utils"
 )
 
 // To simulate reputable action execution

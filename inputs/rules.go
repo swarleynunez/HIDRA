@@ -1,6 +1,6 @@
 package inputs
 
-import "github.com/swarleynunez/superfog/core/types"
+import "github.com/swarleynunez/hidra/core/types"
 
 var Rules = [...]types.Rule{
 	{

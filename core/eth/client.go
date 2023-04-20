@@ -2,7 +2,7 @@ package eth
 
 import (
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/utils"
 )
 
 func Connect(url string) (ethc *ethclient.Client) {

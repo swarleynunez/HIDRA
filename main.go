@@ -1,6 +1,6 @@
 package main
 
-import "github.com/swarleynunez/superfog/cmd"
+import "github.com/swarleynunez/hidra/cmd"
 
 func main() {
 

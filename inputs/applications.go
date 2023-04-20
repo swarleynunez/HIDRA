@@ -1,7 +1,7 @@
 package inputs
 
 import (
-	"github.com/swarleynunez/superfog/core/types"
+	"github.com/swarleynunez/hidra/core/types"
 	"net"
 )
 

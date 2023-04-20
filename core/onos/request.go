@@ -2,7 +2,7 @@ package onos
 
 import (
 	"errors"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/utils"
 	"io"
 	"net/http"
 	"regexp"

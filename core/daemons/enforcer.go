@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/types"
-	"github.com/swarleynunez/superfog/core/utils"
-	"github.com/swarleynunez/superfog/inputs"
+	"github.com/swarleynunez/hidra/core/managers"
+	"github.com/swarleynunez/hidra/core/types"
+	"github.com/swarleynunez/hidra/core/utils"
+	"github.com/swarleynunez/hidra/inputs"
 	"time"
 )
 

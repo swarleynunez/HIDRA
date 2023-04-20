@@ -5,7 +5,7 @@ import (
 	"errors"
 	"github.com/docker/distribution/reference"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/swarleynunez/superfog/core/types"
+	"github.com/swarleynunez/hidra/core/types"
 	"os"
 	"path"
 	"regexp"

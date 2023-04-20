@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/utils"
 )
 
 var (

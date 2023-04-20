@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/swarleynunez/superfog/core/managers"
+	"github.com/swarleynunez/hidra/core/managers"
 )
 
 const registerShortMsg = "Register node in the configured controller smart contract"

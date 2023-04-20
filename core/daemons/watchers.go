@@ -3,10 +3,10 @@ package daemons
 import (
 	"context"
 	"fmt"
-	"github.com/swarleynunez/superfog/core/bindings"
-	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/types"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/bindings"
+	"github.com/swarleynunez/hidra/core/managers"
+	"github.com/swarleynunez/hidra/core/types"
+	"github.com/swarleynunez/hidra/core/utils"
 	"time"
 )
 

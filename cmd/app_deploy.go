@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/types"
-	"github.com/swarleynunez/superfog/core/utils"
-	"github.com/swarleynunez/superfog/inputs"
+	"github.com/swarleynunez/hidra/core/managers"
+	"github.com/swarleynunez/hidra/core/types"
+	"github.com/swarleynunez/hidra/core/utils"
+	"github.com/swarleynunez/hidra/inputs"
 )
 
 const appDeployShortMsg = "Deploy a new application on the cluster"

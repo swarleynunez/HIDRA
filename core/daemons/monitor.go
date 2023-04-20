@@ -2,8 +2,8 @@ package daemons
 
 import (
 	"context"
-	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/managers"
+	"github.com/swarleynunez/hidra/core/utils"
 	"strconv"
 	"time"
 )

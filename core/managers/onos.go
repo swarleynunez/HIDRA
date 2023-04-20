@@ -2,8 +2,8 @@ package managers
 
 import (
 	"context"
-	"github.com/swarleynunez/superfog/core/types"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/types"
+	"github.com/swarleynunez/hidra/core/utils"
 	"net"
 	"strings"
 )

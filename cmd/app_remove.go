@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/swarleynunez/superfog/core/managers"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/managers"
+	"github.com/swarleynunez/hidra/core/utils"
 	"strconv"
 )
 

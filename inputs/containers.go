@@ -2,7 +2,7 @@ package inputs
 
 import (
 	"github.com/docker/go-connections/nat"
-	"github.com/swarleynunez/superfog/core/types"
+	"github.com/swarleynunez/hidra/core/types"
 )
 
 // TODO: add Docker container commands

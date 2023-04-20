@@ -3,7 +3,7 @@ package docker
 import (
 	"context"
 	"github.com/docker/docker/client"
-	"github.com/swarleynunez/superfog/core/utils"
+	"github.com/swarleynunez/hidra/core/utils"
 )
 
 func Connect(ctx context.Context) (docc *client.Client) {

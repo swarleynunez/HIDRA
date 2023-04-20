@@ -24,6 +24,7 @@ var (
 func init() {
 
 	// CLI init configuration
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 
 	// CLI available commands
