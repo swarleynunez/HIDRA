@@ -1,3 +1,7 @@
+### Custom ###
+bin/
+emulation/N[0-9]*/
+
 # Created by https://www.gitignore.io/api/go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode
 
@@ -251,6 +255,3 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode
-
-### Custom ###
-bin/

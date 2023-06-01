@@ -12,13 +12,12 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/disk"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/mem"
-	psutilnet "github.com/shirou/gopsutil/net"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
+	psutilnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/swarleynunez/hidra/core/bindings"
-	"github.com/swarleynunez/hidra/core/docker"
 	"github.com/swarleynunez/hidra/core/eth"
 	"github.com/swarleynunez/hidra/core/onos"
 	"github.com/swarleynunez/hidra/core/types"
@@ -71,9 +70,9 @@ var (
 
 type networks map[string]dockertypes.NetworkStats
 
-//////////
+// ////////
 // Init //
-//////////
+// ////////
 func InitNode(ctx context.Context, deploying bool) {
 
 	// Load .env configuration
@@ -111,7 +110,7 @@ func InitNode(ctx context.Context, deploying bool) {
 	}
 
 	// Connect to the Docker local node
-	_docc = docker.Connect(ctx)
+	// _docc = docker.Connect(ctx)
 
 	// Connect to a cluster ONOS controller
 	_onosc = onos.Connect()
@@ -169,9 +168,9 @@ func InitNodeState(ctx context.Context) {
 	}
 }
 
-/////////////
+// ///////////
 // Getters //
-/////////////
+// ///////////
 func GetFromAccount() common.Address {
 	return _from.Address
 }
@@ -302,9 +301,9 @@ func getContainerState(ctx context.Context, cname string) *types.State {
 	}
 }
 
-//////////////
+// ////////////
 // Handling //
-//////////////
+// ////////////
 // Tasks to execute when the sender and the solver are the same node
 func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 
@@ -394,9 +393,9 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 	}
 }
 
-///////////
+// /////////
 // Tasks //
-///////////
+// /////////
 // onosaction: require ONOS SDN additional actions?
 func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid uint64, onosaction bool) {
 
@@ -518,9 +517,9 @@ func RemoveDCRApplication(ctx context.Context, appid uint64) error {
 	return err
 }
 
-/////////////
+// ///////////
 // Helpers //
-/////////////
+// ///////////
 func calculateCpuPercent(cpu, precpu *dockertypes.CPUStats) (pct float64) {
 
 	// Container and system cpu times variation
@@ -538,7 +537,7 @@ func calculateCpuPercent(cpu, precpu *dockertypes.CPUStats) (pct float64) {
 func getVolumesSize(ctx context.Context, mnts []dockertypes.MountPoint) (r uint64) {
 
 	// Get docker disk usage info (docker system df -v)
-	resp, err := _docc.DiskUsage(ctx)
+	resp, err := _docc.DiskUsage(ctx, dockertypes.DiskUsageOptions{})
 	utils.CheckError(err, utils.WarningMode)
 
 	// Search and compare volumes by name

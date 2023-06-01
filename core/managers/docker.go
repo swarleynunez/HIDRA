@@ -25,9 +25,9 @@ var (
 	errContainerNotFound = errors.New("container not found")
 )
 
-////////////
+// //////////
 // Images //
-////////////
+// //////////
 func existImageLocally(ctx context.Context, imgTag string) bool {
 
 	// Check and format tag
@@ -67,9 +67,9 @@ func pruneImages(ctx context.Context) {
 	utils.CheckError(err, utils.WarningMode)
 }
 
-////////////////
+// //////////////
 // Containers //
-////////////////
+// //////////////
 func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) {
 
 	// Check and format image tag
@@ -110,7 +110,7 @@ func startDockerContainer(ctx context.Context, cname string) {
 func restartDockerContainer(ctx context.Context, cname string) {
 
 	// Stop and start container
-	err := _docc.ContainerRestart(ctx, cname, nil) // nil = do not wait to start container
+	err := _docc.ContainerRestart(ctx, cname, container.StopOptions{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
@@ -123,7 +123,7 @@ func renameDockerContainer(ctx context.Context, cname, new string) {
 func stopDockerContainer(ctx context.Context, cname string) {
 
 	// SIGTERM instead of SIGKILL
-	err := _docc.ContainerStop(ctx, cname, nil) // nil = engine default timeout
+	err := _docc.ContainerStop(ctx, cname, container.StopOptions{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
@@ -159,18 +159,18 @@ func SearchDockerContainers(ctx context.Context, key, value string, all bool) []
 	}
 }
 
-/////////////
+// ///////////
 // Volumes //
-/////////////
+// ///////////
 func pruneVolumes(ctx context.Context) {
 
 	_, err := _docc.VolumesPrune(ctx, filters.Args{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
-/////////////
+// ///////////
 // Helpers //
-/////////////
+// ///////////
 // Format cname from a rcid
 func GetContainerName(rcid uint64) string {
 	return cnameTemplate + strconv.FormatUint(rcid, 10)

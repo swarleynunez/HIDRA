@@ -6,7 +6,6 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/swarleynunez/hidra/core/types"
-	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -24,13 +23,10 @@ var (
 	officialRepoName = "library"
 )
 
-////////////////
+// //////////////
 // Formatters //
-////////////////
+// //////////////
 func FormatPath(paths ...string) (r string) {
-
-	r, err := os.UserHomeDir()
-	CheckError(err, FatalMode)
 
 	for i := range paths {
 		r = path.Join(r, paths[i])
@@ -57,9 +53,9 @@ func FormatImageTag(imgTag string) (r string, err error) {
 	return
 }
 
-//////////////
+// ////////////
 // Checkers //
-//////////////
+// ////////////
 func EmptyEthAddress(addr string) bool {
 
 	return addr == new(common.Address).String()
@@ -155,9 +151,9 @@ func CompareValues(value interface{}, comp types.RuleComparator, limit interface
 	return
 }
 
-//////////////
+// ////////////
 // Encoding //
-//////////////
+// ////////////
 func MarshalJSON(v interface{}) string {
 
 	// Encode any struct to JSON

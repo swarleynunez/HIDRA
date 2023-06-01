@@ -215,12 +215,13 @@ func selectContainer(ctx context.Context, ccache map[uint64]bool) (uint64, error
 	for rcid := range ctrs {
 		// Check if am I the host and if a previous event has already been sent for the container
 		if managers.IsContainerHost(rcid, managers.GetFromAccount()) && !ccache[rcid] {
-			cname := managers.GetContainerName(rcid)
+			/*cname := managers.GetContainerName(rcid)
 			c := managers.SearchDockerContainers(ctx, "name", cname, true)
 			if c != nil {
 				// TODO: implement container selector (next container?)
 				return rcid, nil
-			}
+			}*/
+			return rcid, nil
 		}
 	}
 
