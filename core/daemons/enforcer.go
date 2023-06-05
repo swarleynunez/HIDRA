@@ -80,7 +80,7 @@ func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime u
 
 		// Reset the rcc
 		if rcc.measures == ctime/minter {
-			rcc = cycle{}
+			//rcc = cycle{}
 		}
 
 		// Update the rcc for the next state checking
@@ -103,7 +103,7 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 			}
 
 			// Debug
-			//fmt.Print("[", time.Now().UnixMilli(), "] ", "Sending an event...\n")
+			// fmt.Print("[", time.Now().UnixNano(), "] ", "Sending an event...\n")
 
 			go func() {
 				err = managers.SendEvent(ctx, &etype, rcid, state)
@@ -124,7 +124,7 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 		// Save log into a file, send log to a remote server...
 		fallthrough
 	case types.WarnAction:
-		fmt.Printf(blueInfoFormat, time.Now().UnixMilli(), rule.Msg, rule.Limit, usage)
+		fmt.Printf(blueInfoFormat, time.Now().UnixNano(), rule.Msg, rule.Limit, usage)
 	case types.IgnoreAction:
 		// Do nothing
 	default:
@@ -147,6 +147,11 @@ func selectSolver(eid uint64) (addr common.Address) {
 	var best interface{}
 
 	for _, v := range replies {
+		// Preventing the sender from being the solver
+		if v.Replier == event.Sender {
+			continue
+		}
+
 		// Decode replier state
 		var state types.State
 		utils.UnmarshalJSON(v.NodeState, &state)
@@ -191,17 +196,6 @@ func selectSolver(eid uint64) (addr common.Address) {
 		} else {
 			utils.CheckError(err, utils.WarningMode)
 		}
-	}
-
-	// TODO. Testing
-	addr1 := common.HexToAddress("0x24056A909B4Ed25ac47fbe6421b45cA0DeF1da8C")
-	addr2 := common.HexToAddress("0xb066c34E2C26E6E03042Ae4AA11Dfb9A28cd7C52")
-	//addr3 := common.HexToAddress("0xa852f9A4f20651e4D6645d5200B5CAef06AFf4fB")
-
-	if event.Sender == addr1 {
-		addr = addr2
-	} else if event.Sender == addr2 {
-		addr = addr1
 	}
 
 	return

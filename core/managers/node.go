@@ -96,7 +96,7 @@ func InitNode(ctx context.Context, deploying bool) {
 	_from = eth.LoadAccount(_ks, pass)
 
 	// Debug
-	fmt.Print("[", time.Now().UnixMilli(), "] ", "Loaded account: "+_from.Address.String(), "\n")
+	fmt.Print("[", time.Now().UnixNano(), "] ", "Loaded account: "+_from.Address.String(), "\n")
 
 	_pmutex = &sync.Mutex{} // Mutex to synchronize access to network ports
 
@@ -106,7 +106,7 @@ func InitNode(ctx context.Context, deploying bool) {
 		_finst = faucetInstance(getFaucetContract())
 
 		// Debug
-		fmt.Print("[", time.Now().UnixMilli(), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
+		fmt.Print("[", time.Now().UnixNano(), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
 	}
 
 	// Connect to the Docker local node
@@ -322,12 +322,12 @@ func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 			utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 			// Run task
-			NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
+			// NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
 		}
 	case types.MigrateContainerTask:
 		if event.Rcid > 0 {
 			// TODO: run tasks to balance cluster nodes (resource usage)?
-			RestartContainer(ctx, GetContainerName(event.Rcid))
+			// RestartContainer(ctx, GetContainerName(event.Rcid))
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -357,7 +357,7 @@ func RunEventTask(ctx context.Context, event *types.Event, eid uint64) {
 			utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 			// Run event task
-			NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
+			// NewContainer(ctx, &cinfo, ctr.Appid, event.Rcid, true)
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
@@ -382,10 +382,10 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 	case types.MigrateContainerTask:
 		if event.Rcid > 0 {
 			// Get container linked to the event
-			ctr := GetContainer(event.Rcid)
+			_ = GetContainer(event.Rcid)
 
 			// Run ending task
-			StopContainer(ctx, ctr.Appid, event.Rcid, true)
+			// StopContainer(ctx, ctr.Appid, event.Rcid, true)
 		}
 	default:
 		utils.CheckError(errUnknownTask, utils.WarningMode)
