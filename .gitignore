@@ -1,6 +1,6 @@
 ### Custom ###
 bin/
-emulation/N[0-9]*/
+deployment/
 
 # Created by https://www.gitignore.io/api/go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=go,linux,macos,windows,solidity,soliditytruffle,jetbrains,visualstudiocode

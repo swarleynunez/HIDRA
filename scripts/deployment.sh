@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
 # Settings
-WORKDIR="emulation"
-PEERS=5
+WORKDIR="deployment"
+PEERS=10
 BOOTNODE="enode://8f9079250bf8a523f46a438560433a962ce2d3f9ba20e99145ac1b52fba27216eef5b6774d6cb9dd83fe564d968ed1725c80e031f988d316be05881419bce6e2@127.0.0.1:30301"
 GETH_PORT=30303
 RPC_PORT=8551
 ETH_BALANCE=1000000000000000000000000 # 1000000 ETH
 
-# Prepare emulation environment
+# Prepare deployment environment
 mkdir -p "../$WORKDIR" && cd "../$WORKDIR" || exit
 killall bootnode geth hidra >/dev/null 2>&1
 
@@ -35,7 +35,7 @@ nohup ../bin/bootnode -nodekey bootnode.key >/dev/null 2>&1 &
 
 # Execute sealer
 SEALER_ACCOUNT=$(../bin/geth --datadir "$(pwd)/N1" --verbosity 0 account list | grep -o "[0-9a-fA-F]\{40\}" | head -1)
-nohup ../bin/geth --datadir "$(pwd)/N1" --networkid 12345 --bootnodes $BOOTNODE --maxpeers $PEERS \
+nohup ../bin/geth --datadir "$(pwd)/N1" --networkid 12345 --bootnodes $BOOTNODE --maxpeers $((PEERS -1)) \
   --port $GETH_PORT --authrpc.port $RPC_PORT --syncmode full --unlock "0x$SEALER_ACCOUNT" --password secret.txt \
   --mine >/dev/null 2>&1 &
 
@@ -55,7 +55,7 @@ for i in $(seq 2 $PEERS); do
   ../bin/geth --datadir "$(pwd)/N1" attach --exec "$TXN" >/dev/null 2>&1
 
   # Execute regular peer
-  nohup ../bin/geth --datadir "$PEER_DIR" --networkid 12345 --bootnodes $BOOTNODE --maxpeers $PEERS \
+  nohup ../bin/geth --datadir "$PEER_DIR" --networkid 12345 --bootnodes $BOOTNODE --maxpeers $((PEERS -1)) \
     --port $GETH_PORT --authrpc.port $RPC_PORT --syncmode full --unlock "0x$ACCOUNT" --password secret.txt \
     >/dev/null 2>&1 &
 
@@ -65,8 +65,8 @@ for i in $(seq 2 $PEERS); do
 done
 
 # Compile HIDRA
-env GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o ../bin/hidra ../main.go # Linux
-# env GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 go build -o ../bin/hidra ../main.go # MacOS
+# env GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o ../bin/hidra ../main.go # Linux
+env GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 go build -o ../bin/hidra ../main.go # MacOS
 # env GOOS=windows GOARCH=amd64 CGO_ENABLED=1 go build -o ../bin/hidra ../main.go # Windows
 
 # For each peer
@@ -99,3 +99,6 @@ done
 
 # Deploy a HIDRA application/container
 ../bin/hidra application deploy
+
+# Remove the HIDRA application/container deployed
+../bin/hidra application remove 1

@@ -7,6 +7,7 @@ import (
 	"github.com/swarleynunez/hidra/core/types"
 	"github.com/swarleynunez/hidra/core/utils"
 	"github.com/swarleynunez/hidra/inputs"
+	"time"
 )
 
 const appDeployShortMsg = "Deploy a new application on the cluster"
@@ -24,6 +25,8 @@ var appDeployCmd = &cobra.Command{
 		// Get flags
 		autodeploy, err := cmd.Flags().GetBool("autodeploy")
 		utils.CheckError(err, utils.FatalMode)
+
+		fmt.Println("--> Starting at", time.Now().UnixNano())
 
 		// TODO. SDN ONOS plugin: check if the new application (VS) already exists
 		err = managers.RegisterApplication(ctx, &inputs.AppInfo, []types.ContainerInfo{inputs.CtrInfo}, autodeploy)

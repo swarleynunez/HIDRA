@@ -374,12 +374,12 @@ func WatchContainerUnregistered(ctx context.Context) {
 			if !log.Raw.Removed && !lcache[log.Rcid] {
 				lcache[log.Rcid] = true
 
+				// Debug
+				fmt.Print("[", time.Now().UnixNano(), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
+
 				// Am I the container host?
 				_ = managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
-					// Debug
-					fmt.Print("[", time.Now().UnixNano(), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
-
 					// Check if it is unregistering an application and remove container
 					// go managers.RemoveContainer(ctx, ctr.Appid, log.Rcid, !managers.IsApplicationUnregistered(ctr.Appid))
 				} else {
