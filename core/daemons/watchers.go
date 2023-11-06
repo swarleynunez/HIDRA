@@ -2,6 +2,7 @@ package daemons
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/swarleynunez/hidra/core/bindings"
 	"github.com/swarleynunez/hidra/core/managers"
@@ -10,8 +11,12 @@ import (
 	"time"
 )
 
+var (
+	errNoSolverFound = errors.New("no solver found")
+)
+
 // DEL (debug: all cluster nodes)
-func WatchNewEvent(ctx context.Context) {
+func WatchNewEvent(ctx context.Context, latencies map[uint64]types.EventTimes, nodeStore types.NodeStore) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -34,23 +39,23 @@ func WatchNewEvent(ctx context.Context) {
 			if !log.Raw.Removed && !lcache[log.Eid] {
 				lcache[log.Eid] = true
 
+				// Experiments
+				start := time.Now().UnixMilli()
+				latencies[log.Eid] = types.EventTimes{Start: start}
+
 				// Debug
 				event := managers.GetEvent(log.Eid)
 				if event.Rcid > 0 {
-					fmt.Print("[", time.Now().UnixNano(), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
+					fmt.Print("[", start, "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ", RCID=", event.Rcid, ")\n")
 				} else {
-					fmt.Print("[", time.Now().UnixNano(), "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
+					fmt.Print("[", start, "] ", "NewEvent (EID=", log.Eid, ", Sender=", event.Sender.String(), ")\n")
 				}
 
-				// Am I the event sender?
-				from := managers.GetFromAccount()
-				if event.Sender != from {
-					// Send an event reply containing the current node state
-					go func() {
-						err = managers.SendReply(ctx, log.Eid, managers.GetState())
-						utils.CheckError(err, utils.WarningMode)
-					}()
-				}
+				// Send reply containing the current reputation scores
+				go func() {
+					err = managers.SendReply(ctx, log.Eid, managers.GetReputationScores(nodeStore))
+					utils.CheckError(err, utils.WarningMode)
+				}()
 			}
 		case err = <-sub.Err():
 			utils.CheckError(err, utils.WarningMode)
@@ -82,7 +87,7 @@ func WatchRequiredReplies(ctx context.Context) {
 				lcache[log.Eid] = true
 
 				// Debug
-				fmt.Print("[", time.Now().UnixNano(), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "RequiredReplies (EID=", log.Eid, ")\n")
 
 				// Select and vote an event solver
 				solver := selectSolver(log.Eid)
@@ -91,6 +96,8 @@ func WatchRequiredReplies(ctx context.Context) {
 						err = managers.VoteSolver(ctx, log.Eid, solver)
 						utils.CheckError(err, utils.WarningMode)
 					}()
+				} else {
+					utils.CheckError(errNoSolverFound, utils.WarningMode)
 				}
 			}
 		case err = <-sub.Err():
@@ -100,7 +107,7 @@ func WatchRequiredReplies(ctx context.Context) {
 }
 
 // DEL (debug: all cluster nodes)
-func WatchRequiredVotes(ctx context.Context, ccache map[uint64]bool) {
+func WatchRequiredVotes(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -124,16 +131,11 @@ func WatchRequiredVotes(ctx context.Context, ccache map[uint64]bool) {
 
 				// Debug
 				event := managers.GetEvent(log.Eid)
-				fmt.Print("[", time.Now().UnixNano(), "] ", "RequiredVotes (EID=", log.Eid, ", Solver=", event.Solver.String(), ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "RequiredVotes (EID=", log.Eid, ", Solver=", event.Solver.String(), ")\n")
 
 				// Am I the voted solver?
 				from := managers.GetFromAccount()
 				if event.Solver == from {
-					// Update container cache
-					if event.Rcid > 0 {
-						ccache[event.Rcid] = true
-					}
-
 					// Am I the event sender?
 					if event.Sender != from {
 						// Execute required event task (depends on the event type)
@@ -151,7 +153,7 @@ func WatchRequiredVotes(ctx context.Context, ccache map[uint64]bool) {
 }
 
 // DEL (debug: all cluster nodes)
-func WatchEventSolved(ctx context.Context, ccache map[uint64]bool) {
+func WatchEventSolved(ctx context.Context, latencies map[uint64]types.EventTimes) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -173,8 +175,13 @@ func WatchEventSolved(ctx context.Context, ccache map[uint64]bool) {
 			if !log.Raw.Removed && !lcache[log.Eid] {
 				lcache[log.Eid] = true
 
+				// Experiments
+				end := time.Now().UnixMilli()
+				latencies[log.Eid] = types.EventTimes{Start: latencies[log.Eid].Start, End: end}
+
 				// Debug
-				fmt.Print("[", time.Now().UnixNano(), "] ", "EventSolved (EID=", log.Eid, ")\n")
+				fmt.Print("[", end, "] ", "EventSolved (EID=", log.Eid, ")\n")
+				//fmt.Print("\n--------------------------------------------------------------------------------\n\n")
 
 				// Am I the event sender and not the event solver?
 				event := managers.GetEvent(log.Eid)
@@ -183,13 +190,6 @@ func WatchEventSolved(ctx context.Context, ccache map[uint64]bool) {
 					if event.Solver != from {
 						// Execute required ending task (depends on the event type)
 						go managers.RunEventEndingTask(ctx, event)
-					}
-				}
-
-				// Update container cache
-				if event.Sender == from || event.Solver == from {
-					if event.Rcid > 0 {
-						ccache[event.Rcid] = false
 					}
 				}
 			}
@@ -224,10 +224,9 @@ func WatchApplicationRegistered() {
 
 				// Am I the application owner?
 				app := managers.GetApplication(log.Appid)
-				from := managers.GetFromAccount()
-				if app.Owner == from {
+				if app.Owner == managers.GetFromAccount() {
 					// Debug
-					fmt.Print("[", time.Now().UnixNano(), "] ", "ApplicationRegistered (APPID=", log.Appid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ApplicationRegistered (APPID=", log.Appid, ")\n")
 
 					// Decode application info
 					var ainfo types.ApplicationInfo
@@ -268,33 +267,32 @@ func WatchContainerRegistered(ctx context.Context) {
 
 				// Am I the container owner?
 				ctr := managers.GetContainer(log.Rcid)
-				owner := managers.GetApplication(ctr.Appid).Owner
 				from := managers.GetFromAccount()
-				if owner == from {
+				if managers.GetApplication(ctr.Appid).Owner == from {
 					// Debug
-					fmt.Print("[", time.Now().UnixNano(), "] ", "ContainerRegistered (RCID=", log.Rcid, ", APPID=", ctr.Appid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerRegistered (RCID=", log.Rcid, ", APPID=", ctr.Appid, ")\n")
 
 					// Am I the container host?
 					if managers.IsContainerHost(log.Rcid, from) {
-						// Decode container info
+						/*// Decode container info
 						var cinfo types.ContainerInfo
 						utils.UnmarshalJSON(ctr.Info, &cinfo)
 
 						// Autodeploy mode (anonymous function)
 						go func() {
-							// managers.NewContainer(ctx, &cinfo, ctr.Appid, log.Rcid, true)
+							managers.NewContainer(ctx, &cinfo, ctr.Appid, log.Rcid, true)
 							err = managers.ActivateContainer(ctx, log.Rcid)
 							utils.CheckError(err, utils.WarningMode)
-						}()
+						}()*/
 					} else {
 						// Encapsulate event type
 						etype := types.EventType{
-							RequiredTask:     types.NewContainerTask,
-							TroubledResource: types.AllResources,
+							RequiredTask: types.NewContainerTask,
+							Resource:     types.AllResources,
 						}
 
 						go func() {
-							err = managers.SendEvent(ctx, &etype, log.Rcid, managers.GetState())
+							err = managers.SendEvent(ctx, &etype, log.Rcid)
 							utils.CheckError(err, utils.WarningMode)
 						}()
 					}
@@ -307,7 +305,7 @@ func WatchContainerRegistered(ctx context.Context) {
 }
 
 // DCR (debug: only host nodes)
-func WatchContainerUpdated(ctx context.Context) {
+/*func WatchContainerUpdated(ctx context.Context) {
 
 	// Controller smart contract instance
 	cinst := managers.GetControllerInst()
@@ -328,7 +326,7 @@ func WatchContainerUpdated(ctx context.Context) {
 				ctr := managers.GetContainer(log.Rcid)
 				if managers.IsContainerHost(log.Rcid, managers.GetFromAccount()) {
 					// Debug
-					fmt.Print("[", time.Now().UnixNano(), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
+					fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerUpdated (RCID=", log.Rcid, ")\n")
 
 					// Decode container info
 					var cinfo types.ContainerInfo
@@ -375,7 +373,7 @@ func WatchContainerUnregistered(ctx context.Context) {
 				lcache[log.Rcid] = true
 
 				// Debug
-				fmt.Print("[", time.Now().UnixNano(), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
+				fmt.Print("[", time.Now().UnixMilli(), "] ", "ContainerUnregistered (RCID=", log.Rcid, ")\n")
 
 				// Am I the container host?
 				_ = managers.GetContainer(log.Rcid)
@@ -391,4 +389,4 @@ func WatchContainerUnregistered(ctx context.Context) {
 			utils.CheckError(err, utils.WarningMode)
 		}
 	}
-}
+}*/

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.21;
 
 import "./DRS.sol";
 
@@ -7,7 +7,7 @@ contract Faucet {
     // Action list
     mapping(string => DRS.ReputableAction) private actions;
 
-    constructor() public {
+    constructor() {
         // Initialize system actions
         actions["sendEvent"] = DRS.ReputableAction(100, 1);
         actions["sendReply"] = DRS.ReputableAction(100, 1);
@@ -28,11 +28,9 @@ contract Faucet {
         return actions[action].limit;
     }
 
-    function getActionVariation(string memory action)
-        public
-        view
-        returns (int64)
-    {
+    function getActionVariation(
+        string memory action
+    ) public view returns (int64) {
         return actions[action].variation;
     }
 }

@@ -2,7 +2,7 @@ package types
 
 // TODO: add a task to execute by the enforcer
 type Rule struct {
-	NameId     string // Unique
+	NameID     string // Unique
 	Resource   resource
 	MetricType RuleMetricType
 	Comparator RuleComparator

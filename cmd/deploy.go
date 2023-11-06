@@ -21,9 +21,9 @@ var deployCmd = &cobra.Command{
 		// Deploy a new controller
 		caddr := managers.DeployController(ctx)
 
-		// Save the controller address
+		// Save the controller contract address
 		utils.SetEnv("CONTROLLER_ADDR", caddr.String())
 
-		fmt.Println("--> Controller address: ", caddr.String())
+		fmt.Println("--> Controller contract:", caddr.String())
 	},
 }

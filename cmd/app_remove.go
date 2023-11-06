@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/swarleynunez/hidra/core/managers"
-	"github.com/swarleynunez/hidra/core/utils"
-	"strconv"
 )
 
 const appRemoveShortMsg = "Remove an application from the cluster"
@@ -21,11 +19,11 @@ var appRemoveCmd = &cobra.Command{
 		managers.InitNode(ctx, false)
 
 		// Get and format args
-		appid, err := strconv.ParseUint(args[0], 10, 64)
+		/*appid, err := strconv.ParseUint(args[0], 10, 64)
 		utils.CheckError(err, utils.FatalMode)
 
 		err = managers.RemoveDCRApplication(ctx, appid)
-		utils.CheckError(err, utils.FatalMode)
+		utils.CheckError(err, utils.FatalMode)*/
 
 		fmt.Println("--> Application removed from the cluster")
 	},

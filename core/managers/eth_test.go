@@ -59,7 +59,7 @@ func TestSendEvent(t *testing.T) {
 
 	etype := types.EventType{
 		RequiredTask:     types.PingNodeTask,
-		TroubledResource: types.NoResource,
+		Resource: types.NoResource,
 	}
 	SendEvent(&etype, 0, GetState())
 
@@ -271,7 +271,7 @@ func TestEventWithContainer(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	etype := types.EventType{
 		RequiredTask:     types.MigrateContainerTask,
-		TroubledResource: types.CpuResource,
+		Resource: types.CpuResource,
 	}
 	rcid := getClusterState().NextCtrId - 1
 	SendEvent(&etype, rcid, GetState())

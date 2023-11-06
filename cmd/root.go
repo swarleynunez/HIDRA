@@ -34,6 +34,7 @@ func init() {
 		runCmd,
 		appCmd,
 		showCmd,
+		//monitorCmd,
 		versionCmd)
 
 	// Subcommands

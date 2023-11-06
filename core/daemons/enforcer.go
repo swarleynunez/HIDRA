@@ -8,12 +8,14 @@ import (
 	"github.com/swarleynunez/hidra/core/managers"
 	"github.com/swarleynunez/hidra/core/types"
 	"github.com/swarleynunez/hidra/core/utils"
-	"github.com/swarleynunez/hidra/inputs"
+	"slices"
+	"strconv"
 	"time"
 )
 
 const (
-	blueInfoFormat = "\033[1;34m[%d] %s (Limit: %v, Usage: %v)\033[0m\n"
+	//blueInfoFormat = "\033[1;34m[%d] %s (Limit: %v, Usage: %v)\033[0m\n"
+	blueInfoFormat = "[%d] %s (Limit: %v, Usage: %v)\n"
 )
 
 var (
@@ -21,74 +23,11 @@ var (
 	errBoundNotImplemented = errors.New("spec bound type not implemented")
 	errUnknownAction       = errors.New("unknown rule action")
 	errNoContainersFound   = errors.New("no containers found")
+	errReputationDraw      = errors.New("reputation draw")
 )
 
-func checkStateRules(ctx context.Context, rccs map[string]cycle, minter, ctime uint64, ccache map[uint64]bool) {
-
-	state := managers.GetState()
-
-	for _, rule := range inputs.Rules {
-		// Current spec value (variable for different value types)
-		var usage interface{}
-
-		switch rule.Resource {
-		case types.CpuResource:
-			usage = selectCpuMetric(rule.MetricType, state)
-		case types.MemResource:
-			usage = selectMemMetric(rule.MetricType, state)
-		case types.DiskResource:
-			usage = selectDiskMetric(rule.MetricType, state)
-		case types.PktSentResource:
-			usage = selectPktSentMetric(rule.MetricType, state)
-		case types.PktRecvResource:
-			usage = selectPktRecvMetric(rule.MetricType, state)
-		default:
-			utils.CheckError(errUnknownSpec, utils.WarningMode)
-			continue // Drop rule check
-		}
-
-		if usage == nil {
-			utils.CheckError(errBoundNotImplemented, utils.WarningMode)
-			continue // Drop rule check
-		}
-
-		// Get the rcc
-		rcc := rccs[rule.NameId]
-
-		// Count a measure if the rcc has already started
-		if rcc.measures > 0 {
-			rcc.measures++
-		}
-
-		// Rule checking
-		if ok, err := utils.CompareValues(usage, rule.Comparator, rule.Limit); ok {
-
-			// Start the rcc
-			if rcc.measures == 0 {
-				rcc.measures++
-			}
-
-			// Count a trigger
-			rcc.triggers++
-
-			if rcc.measures == ctime/minter && rcc.measures == rcc.triggers {
-				runRuleAction(ctx, &rule, ccache, state, usage)
-			}
-		} else {
-			utils.CheckError(err, utils.WarningMode)
-		}
-
-		// Reset the rcc
-		if rcc.measures == ctime/minter {
-			//rcc = cycle{}
-		}
-
-		// Update the rcc for the next state checking
-		rccs[rule.NameId] = rcc
-	}
-}
-
-func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool, state *types.State, usage interface{}) {
+// MonitorV1 //
+func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool, usage interface{}) {
 
 	switch rule.Action {
 	case types.SendEventAction:
@@ -98,15 +37,15 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 
 			// Encapsulate event type
 			etype := types.EventType{
-				RequiredTask:     types.MigrateContainerTask,
-				TroubledResource: rule.Resource,
+				RequiredTask: types.MigrateContainerTask,
+				Resource:     rule.Resource,
 			}
 
 			// Debug
-			// fmt.Print("[", time.Now().UnixNano(), "] ", "Sending an event...\n")
+			// fmt.Print("[", time.Now().UnixMilli(), "] ", "Sending an event...\n")
 
 			go func() {
-				err = managers.SendEvent(ctx, &etype, rcid, state)
+				err = managers.SendEvent(ctx, &etype, rcid)
 				if err != nil {
 					ccache[rcid] = false
 					utils.CheckError(err, utils.WarningMode)
@@ -124,7 +63,7 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 		// Save log into a file, send log to a remote server...
 		fallthrough
 	case types.WarnAction:
-		fmt.Printf(blueInfoFormat, time.Now().UnixNano(), rule.Msg, rule.Limit, usage)
+		fmt.Printf(blueInfoFormat, time.Now().UnixMilli(), rule.Msg, rule.Limit, usage)
 	case types.IgnoreAction:
 		// Do nothing
 	default:
@@ -134,7 +73,7 @@ func runRuleAction(ctx context.Context, rule *types.Rule, ccache map[uint64]bool
 }
 
 // Select an event solver according to spec metrics
-func selectSolver(eid uint64) (addr common.Address) {
+/*func selectSolver(eid uint64) (addr common.Address) {
 
 	event := managers.GetEvent(eid)
 	replies := managers.GetEventReplies(eid)
@@ -164,7 +103,7 @@ func selectSolver(eid uint64) (addr common.Address) {
 		var comp types.RuleComparator
 
 		// Select metric and comparator
-		switch etype.TroubledResource {
+		switch etype.Resource {
 		case types.AllResources, types.CpuResource: // TODO: implement algorithm to check all resources at the same time
 			met = state.CpuUsage / specs.CpuMhz // Ratio
 			comp = types.LessComp
@@ -199,14 +138,13 @@ func selectSolver(eid uint64) (addr common.Address) {
 	}
 
 	return
-}
+}*/
 
 // Select a container according to its config and spec usage
 func selectContainer(ctx context.Context, ccache map[uint64]bool) (uint64, error) {
 
-	// Get distributed registry active containers
-	ctrs := managers.GetActiveContainers()
-	for rcid := range ctrs {
+	// Get DCR active containers
+	for rcid := range managers.GetActiveContainers() {
 		// Check if am I the host and if a previous event has already been sent for the container
 		if managers.IsContainerHost(rcid, managers.GetFromAccount()) && !ccache[rcid] {
 			/*cname := managers.GetContainerName(rcid)
@@ -279,4 +217,154 @@ func selectPktRecvMetric(mt types.RuleMetricType, state *types.State) (usage int
 	}
 
 	return
+}
+
+// MonitorV2 //
+func updateNodeReputations(nodeStore types.NodeStore, lossProbTh, latTh uint64) {
+
+	// For each peer
+	for nodeAddr, nodeInfo := range nodeStore {
+		if nodeInfo.CurrentEpoch.TotalPackets == 0 {
+			continue
+		}
+
+		// FILTER_1: availability
+		filter1 := checkAvailabilityFilter(nodeInfo.CurrentEpoch, lossProbTh)
+
+		// FILTER_2: latency
+		filter2 := checkLatencyFilter(nodeInfo.CurrentEpoch, latTh)
+
+		// Calculate reputation value
+		var repValue uint8
+		if filter1 && filter2 {
+			repValue = 1
+		}
+
+		aggregateReputationValue(nodeStore, nodeAddr, repValue)
+
+		// Reset current epoch
+		nodeStore[nodeAddr].CurrentEpoch = types.EpochInfo{}
+	}
+}
+
+func checkAvailabilityFilter(currentEpoch types.EpochInfo, lossProbTh uint64) (success bool) {
+
+	if float64(currentEpoch.OKPackets)/float64(currentEpoch.TotalPackets) >= float64(100-lossProbTh)/100 {
+		success = true
+	}
+
+	return
+}
+
+func checkLatencyFilter(currentEpoch types.EpochInfo, latTh uint64) (success bool) {
+
+	count := len(currentEpoch.Latencies)
+	if count > 0 {
+		var total uint64
+		for _, v := range currentEpoch.Latencies {
+			total += v
+		}
+		if float64(total)/float64(count) <= float64(latTh) {
+			success = true
+		}
+	}
+
+	return
+}
+
+func aggregateReputationValue(nodeStore types.NodeStore, nodeAddr common.Address, repValue uint8) {
+
+	// Save reputation value as historical value
+	nodeStore[nodeAddr].Reputation.Values = append(nodeStore[nodeAddr].Reputation.Values, repValue)
+
+	// TODO. Update reputation score
+	rvs := nodeStore[nodeAddr].Reputation.Values
+	var total uint64
+	for _, v := range rvs {
+		total += uint64(v)
+	}
+	nodeStore[nodeAddr].Reputation.Score = float64(total) / float64(len(rvs))
+}
+
+func selectSolver(eid uint64) common.Address {
+
+	fmt.Println("\nREPLIES:")
+
+	// Get reputation scores per node
+	replies := managers.GetEventReplies(eid)
+	scores := make(map[common.Address][]float64)
+	for _, reply := range replies {
+
+		fmt.Println(reply.Replier, reply.RepScores)
+
+		for _, rs := range reply.RepScores {
+			// Check reputation score
+			score, err := strconv.ParseFloat(rs.Score, 64)
+			if err != nil || score < 0 || score > 1 {
+				utils.CheckError(err, utils.WarningMode)
+				continue
+			}
+
+			// Store reputation score
+			scores[rs.Node] = append(scores[rs.Node], score)
+		}
+	}
+
+	fmt.Println("\nSCORES PER NODE:")
+
+	// Aggregate reputation scores per node prioritizing the best
+	maxrss := managers.GetClusterConfig().MaxRepScores
+	totals := make(map[common.Address]float64)
+	for naddr, nrss := range scores {
+		// Sort node scores in descending order
+		slices.Sort(nrss)
+		slices.Reverse(nrss)
+
+		fmt.Println(naddr, nrss)
+
+		var count uint64
+		for _, score := range nrss {
+			// Limiting the number of reputation scores to be counted
+			if count == maxrss {
+				break
+			}
+			count++
+
+			// Add reputation score to the total
+			totals[naddr] += score
+		}
+	}
+
+	fmt.Println("\nTOTAL SCORE PER NODE:")
+	for k, v := range totals {
+		fmt.Println(k, v)
+	}
+
+	// Get and decode container info
+	rcid := managers.GetEvent(eid).Rcid
+	var cinfo types.ContainerInfo
+	if rcid > 0 {
+		utils.UnmarshalJSON(managers.GetContainer(rcid).Info, &cinfo)
+	}
+
+	// Get the address of the most reputed node
+	var (
+		bestScore float64 = -1
+		bestAddr  common.Address
+	)
+	for addr, total := range totals {
+		// FILTER_3: resources
+		if rcid > 0 && !managers.CanExecuteContainer(addr, cinfo.CpuLimit, cinfo.MemLimit) {
+			continue
+		}
+
+		if total > bestScore {
+			bestScore, bestAddr = total, addr
+		} else if total == bestScore {
+			// TODO: manage draws
+			utils.CheckError(errReputationDraw, utils.WarningMode)
+		}
+	}
+
+	return bestAddr
 }

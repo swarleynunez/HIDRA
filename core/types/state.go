@@ -11,9 +11,10 @@ type ClusterState struct {
 }
 
 type ClusterConfig struct {
-	InitNodeRep int64
-	NodesThld   uint8 // Percentage threshold to calculate required nodes (0-100)
-	VotesThld   uint8 // Percentage threshold to calculate required votes (0-100)
+	//InitNodeRep int64
+	NodesTh      uint8  // Percentage threshold to calculate required nodes (0-100)
+	VotesTh      uint8  // Percentage threshold to calculate required votes (0-100)
+	MaxRepScores uint64 // Maximum number of reputation scores to be counted for each node
 }
 
 // Node or container state at a specific time

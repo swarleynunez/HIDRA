@@ -31,7 +31,7 @@ var (
 
 // NodeMetaData contains all meta data concerning the Node contract.
 var NodeMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"},{\"internalType\":\"int64\",\"name\":\"_reputation\",\"type\":\"int64\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"getReputation\",\"outputs\":[{\"internalType\":\"int64\",\"name\":\"\",\"type\":\"int64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"getSpecs\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"int64\",\"name\":\"variation\",\"type\":\"int64\"}],\"name\":\"setVariation\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"}],\"name\":\"updateSpecs\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"_addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"getSpecs\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_specs\",\"type\":\"string\"}],\"name\":\"updateSpecs\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]",
 }
 
 // NodeABI is the input ABI used to generate the binding from.
@@ -180,37 +180,6 @@ func (_Node *NodeTransactorRaw) Transact(opts *bind.TransactOpts, method string,
 	return _Node.Contract.contract.Transact(opts, method, params...)
 }
 
-// GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
-//
-// Solidity: function getReputation() view returns(int64)
-func (_Node *NodeCaller) GetReputation(opts *bind.CallOpts) (int64, error) {
-	var out []interface{}
-	err := _Node.contract.Call(opts, &out, "getReputation")
-
-	if err != nil {
-		return *new(int64), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(int64)).(*int64)
-
-	return out0, err
-
-}
-
-// GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
-//
-// Solidity: function getReputation() view returns(int64)
-func (_Node *NodeSession) GetReputation() (int64, error) {
-	return _Node.Contract.GetReputation(&_Node.CallOpts)
-}
-
-// GetReputation is a free data retrieval call binding the contract method 0xffe6a18e.
-//
-// Solidity: function getReputation() view returns(int64)
-func (_Node *NodeCallerSession) GetReputation() (int64, error) {
-	return _Node.Contract.GetReputation(&_Node.CallOpts)
-}
-
 // GetSpecs is a free data retrieval call binding the contract method 0x2c844f50.
 //
 // Solidity: function getSpecs() view returns(string)
@@ -240,27 +209,6 @@ func (_Node *NodeSession) GetSpecs() (string, error) {
 // Solidity: function getSpecs() view returns(string)
 func (_Node *NodeCallerSession) GetSpecs() (string, error) {
 	return _Node.Contract.GetSpecs(&_Node.CallOpts)
-}
-
-// SetVariation is a paid mutator transaction binding the contract method 0xb50b62c9.
-//
-// Solidity: function setVariation(int64 variation) returns()
-func (_Node *NodeTransactor) SetVariation(opts *bind.TransactOpts, variation int64) (*types.Transaction, error) {
-	return _Node.contract.Transact(opts, "setVariation", variation)
-}
-
-// SetVariation is a paid mutator transaction binding the contract method 0xb50b62c9.
-//
-// Solidity: function setVariation(int64 variation) returns()
-func (_Node *NodeSession) SetVariation(variation int64) (*types.Transaction, error) {
-	return _Node.Contract.SetVariation(&_Node.TransactOpts, variation)
-}
-
-// SetVariation is a paid mutator transaction binding the contract method 0xb50b62c9.
-//
-// Solidity: function setVariation(int64 variation) returns()
-func (_Node *NodeTransactorSession) SetVariation(variation int64) (*types.Transaction, error) {
-	return _Node.Contract.SetVariation(&_Node.TransactOpts, variation)
 }
 
 // UpdateSpecs is a paid mutator transaction binding the contract method 0xb60bdb29.

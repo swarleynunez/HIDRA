@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.21;
 
 // Distributed Event Logger
 library DEL {
@@ -7,16 +7,26 @@ library DEL {
         string eType; // Encoded event type
         address sender;
         address solver;
-        EventReply[] replies; // Set of node replies
         uint64 rcid; // Optional, depending on the event type
-        uint256 sentAt; // Unix time
-        uint256 solvedAt; // Unix time
+        EventReply[] replies; // Set of node replies
+        mapping(address => uint64) votes;
+        mapping(address => bool) repliers;
+        mapping(address => bool) voters;
+        bool hasRequiredReplies;
+        bool hasRequiredVotes;
+        uint sentAt; // Unix time
+        uint solvedAt; // Unix time
     }
 
     struct EventReply {
         address replier;
-        string nodeState; // Encoded
-        address[] voters;
-        uint256 repliedAt; // Unix time
+        ReputationScore[] repScores;
+        mapping(address => bool) reputedNodes;
+        uint repliedAt; // Unix time
+    }
+
+    struct ReputationScore {
+        address node;
+        string score;
     }
 }

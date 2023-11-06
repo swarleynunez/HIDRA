@@ -25,9 +25,7 @@ var (
 	errContainerNotFound = errors.New("container not found")
 )
 
-// //////////
 // Images //
-// //////////
 func existImageLocally(ctx context.Context, imgTag string) bool {
 
 	// Check and format tag
@@ -53,7 +51,7 @@ func existImageLocally(ctx context.Context, imgTag string) bool {
 func pullImage(ctx context.Context, imgTag string) {
 
 	// Debug
-	fmt.Print("[", time.Now().UnixNano(), "] ", "Downloading '"+imgTag+"' image...\n")
+	fmt.Print("[", time.Now().UnixMilli(), "] ", "Downloading '"+imgTag+"' image...\n")
 
 	out, err := _docc.ImagePull(ctx, imgTag, dockertypes.ImagePullOptions{})
 	utils.CheckError(err, utils.WarningMode)
@@ -67,9 +65,7 @@ func pruneImages(ctx context.Context) {
 	utils.CheckError(err, utils.WarningMode)
 }
 
-// //////////////
 // Containers //
-// //////////////
 func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cname string) {
 
 	// Check and format image tag
@@ -91,8 +87,8 @@ func createDockerContainer(ctx context.Context, cinfo *types.ContainerInfo, cnam
 		Binds:        cinfo.Volumes,
 		PortBindings: ports,
 		Resources: container.Resources{
-			Memory: int64(cinfo.MemLimit),
-			//NanoCPUs: int64(cinfo.CPULimit),
+			NanoCPUs: int64(cinfo.CpuLimit),
+			Memory:   int64(cinfo.MemLimit),
 		},
 	}
 	netConfig := &network.NetworkingConfig{}
@@ -159,18 +155,14 @@ func SearchDockerContainers(ctx context.Context, key, value string, all bool) []
 	}
 }
 
-// ///////////
 // Volumes //
-// ///////////
 func pruneVolumes(ctx context.Context) {
 
 	_, err := _docc.VolumesPrune(ctx, filters.Args{})
 	utils.CheckError(err, utils.WarningMode)
 }
 
-// ///////////
 // Helpers //
-// ///////////
 // Format cname from a rcid
 func GetContainerName(rcid uint64) string {
 	return cnameTemplate + strconv.FormatUint(rcid, 10)

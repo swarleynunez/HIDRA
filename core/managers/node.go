@@ -2,7 +2,6 @@ package managers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	dockertypes "github.com/docker/docker/api/types"
@@ -22,24 +21,12 @@ import (
 	"github.com/swarleynunez/hidra/core/onos"
 	"github.com/swarleynunez/hidra/core/types"
 	"github.com/swarleynunez/hidra/core/utils"
-	"math"
 	"net"
 	"strconv"
 	"sync"
-	"time"
 )
 
 const (
-	// Gas limit for each smart contract function
-	/*DeployControllerGasLimit uint64 = 3600000
-	RegisterNodeGasLimit     uint64 = 530000
-	SendEventGasLimit        uint64 = 340000
-	SendReplyGasLimit        uint64 = 230000
-	VoteSolverGasLimit       uint64 = 180000
-	SolveEventGasLimit       uint64 = 110000
-	RecordContainerGasLimit  uint64 = 370000
-	RemoveContainerGasLimit  uint64 = 150000*/
-
 	// Reputable actions
 	SendEventAction     = "sendEvent"
 	SendReplyAction     = "sendReply"
@@ -60,9 +47,9 @@ var (
 	_from   accounts.Account
 	_pmutex *sync.Mutex
 	_cinst  *bindings.Controller
-	_finst  *bindings.Faucet
-	_docc   *client.Client
-	_onosc  *onos.Client
+	//_finst  *bindings.Faucet
+	_docc  *client.Client
+	_onosc *onos.Client
 
 	// Errors
 	errUnknownTask = errors.New("unknown event task")
@@ -70,19 +57,13 @@ var (
 
 type networks map[string]dockertypes.NetworkStats
 
-// ////////
 // Init //
-// ////////
 func InitNode(ctx context.Context, deploying bool) {
 
-	// Load .env configuration
+	// Load .env
 	utils.LoadEnv()
-
-	var (
-		nodeDir = utils.GetEnv("ETH_NODE_DIR")
-		// TODO: test --> addr    = utils.GetEnv("NODE_ADDR")
-		pass = utils.GetEnv("NODE_PASS")
-	)
+	nodeDir := utils.GetEnv("ETH_NODE_DIR")
+	pass := utils.GetEnv("ETH_NODE_PASS")
 
 	// Connect to the Ethereum local node
 	_ethc = eth.Connect(utils.FormatPath(nodeDir, "geth.ipc"))
@@ -92,53 +73,33 @@ func InitNode(ctx context.Context, deploying bool) {
 	_ks = eth.LoadKeystore(keypath)
 
 	// Load and unlock an Ethereum account
-	// TODO: test --> _from = eth.LoadAccount(_ks, addr, pass)
 	_from = eth.LoadAccount(_ks, pass)
 
 	// Debug
-	fmt.Print("[", time.Now().UnixNano(), "] ", "Loaded account: "+_from.Address.String(), "\n")
-
-	_pmutex = &sync.Mutex{} // Mutex to synchronize access to network ports
+	fmt.Println("-->", "Loaded EOA:", _from.Address.String())
 
 	// Get smart contracts instances
 	if !deploying {
 		_cinst = controllerInstance()
-		_finst = faucetInstance(getFaucetContract())
+		//_finst = faucetInstance(getFaucetContract())
 
 		// Debug
-		fmt.Print("[", time.Now().UnixNano(), "] ", "Loaded controller address: ", utils.GetEnv("CONTROLLER_ADDR"), "\n")
+		fmt.Println("-->", "Loaded smart contract:", utils.GetEnv("CONTROLLER_ADDR"))
 	}
 
-	// Connect to the Docker local node
-	// _docc = docker.Connect(ctx)
+	// Connect to the Docker local daemon
+	//_docc = docker.Connect(ctx)
 
 	// Connect to a cluster ONOS controller
 	_onosc = onos.Connect()
 
-	// Debug
-	/*go func() {
-		for {
-			time.Sleep(3 * time.Minute)
-			for {
-				// Create and configure a transaction
-				tx := eth.SignedEtherTransaction(ctx, _ethc, _ks, _from, "12345678", common.HexToAddress("0x22dbCF83D13a84C53893903189Ee33d1115C0259"), 0)
-
-				// Send transaction
-				err := _ethc.SendTransaction(ctx, tx)
-
-				if err != nil {
-					continue
-				} else {
-					break
-				}
-			}
-		}
-	}()*/
+	// Mutex to synchronize access to network ports
+	_pmutex = &sync.Mutex{}
 }
 
 func InitNodeState(ctx context.Context) {
 
-	// Get distributed registry active containers
+	// Get DCR active containers
 	ctrs := GetActiveContainers()
 	for rcid := range ctrs {
 		// Am I the host?
@@ -168,9 +129,7 @@ func InitNodeState(ctx context.Context) {
 	}
 }
 
-// ///////////
 // Getters //
-// ///////////
 func GetFromAccount() common.Address {
 	return _from.Address
 }
@@ -199,11 +158,11 @@ func GetSpecs() *types.NodeSpecs {
 	return &types.NodeSpecs{
 		Arch:      hi.KernelArch,
 		Cores:     uint64(cores),
-		CpuMhz:    ci[0].Mhz,
+		CpuFreq:   ci[0].Mhz,
 		MemTotal:  vm.Total,
 		DiskTotal: du.Total,
 		OS:        hi.OS,
-		IP:        getNodeIP(),
+		IP:        GetNodeIP(),
 	}
 }
 
@@ -275,7 +234,7 @@ func GetState() *types.State {
 	}
 }
 
-func getContainerState(ctx context.Context, cname string) *types.State {
+/*func getContainerState(ctx context.Context, cname string) *types.State {
 
 	// Get current stats
 	cs, err := _docc.ContainerStatsOneShot(ctx, cname)
@@ -299,11 +258,53 @@ func getContainerState(ctx context.Context, cname string) *types.State {
 		NetPacketsSent: ns.TxPackets,
 		NetPacketsRecv: ns.RxPackets,
 	}
+}*/
+
+func GetNodeAddressFromIP(ip, port string) (nodeAddr common.Address) {
+
+	allSpecs := GetAllNodeSpecs()
+	for k, v := range allSpecs {
+		// Get and decode node specs
+		var specs types.NodeSpecs
+		utils.UnmarshalJSON(v, &specs)
+
+		// TODO. IP + port (due to the emulation of nodes)
+		if specs.IP.String() == ip && strconv.FormatUint(uint64(specs.Port), 10) == port {
+			nodeAddr = k
+			break
+		}
+	}
+
+	return
 }
 
-// ////////////
+func GetNodeIPFromAddress(addr common.Address) (nodeIP, nodePort string) {
+
+	// Get and decode node specs
+	var specs types.NodeSpecs
+	utils.UnmarshalJSON(GetNodeSpecs(addr), &specs)
+
+	nodeIP = specs.IP.String()
+	nodePort = strconv.FormatUint(uint64(specs.Port), 10)
+
+	return
+}
+
+func GetReputationScores(nodeStore types.NodeStore) (repScores []bindings.DELReputationScore) {
+
+	fmt.Println("\nLOCAL REPUTATIONS:")
+
+	for k, v := range nodeStore {
+		s := strconv.FormatFloat(v.Reputation.Score, 'f', -1, 64)
+		repScores = append(repScores, bindings.DELReputationScore{Node: k, Score: s})
+
+		fmt.Println(bindings.DELReputationScore{Node: k, Score: s}, v.Reputation.Values)
+	}
+
+	return
+}
+
 // Handling //
-// ////////////
 // Tasks to execute when the sender and the solver are the same node
 func RunTask(ctx context.Context, event *types.Event, eid uint64) {
 
@@ -393,9 +394,7 @@ func RunEventEndingTask(ctx context.Context, event *types.Event) {
 	}
 }
 
-// /////////
 // Tasks //
-// /////////
 // onosaction: require ONOS SDN additional actions?
 func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid uint64, onosaction bool) {
 
@@ -418,7 +417,7 @@ func NewContainer(ctx context.Context, cinfo *types.ContainerInfo, appid, rcid u
 
 	// ONOS SDN plugin
 	if onosaction {
-		ONOSAddVSInstance(ctx, appid, rcid, getNodeIP())
+		ONOSAddVSInstance(ctx, appid, rcid, GetNodeIP())
 		ONOSActivateVirtualService(appid)
 	}
 }
@@ -452,7 +451,7 @@ func RestartContainer(ctx context.Context, cname string) {
 }
 
 // Rename a container (temporarily, before remove the container)
-/*func RenameContainer(ctx context.Context, cname string) (cid string) {
+func RenameContainer(ctx context.Context, cname string) (cid string) {
 
 	// Does the container exist locally?
 	c := SearchDockerContainers(ctx, "name", cname, true)
@@ -462,7 +461,7 @@ func RestartContainer(ctx context.Context, cname string) {
 	}
 
 	return
-}*/
+}
 
 // onosaction: require ONOS SDN additional actions?
 func StopContainer(ctx context.Context, appid, rcid uint64, onosaction bool) {
@@ -507,7 +506,7 @@ func RemoveContainer(ctx context.Context, appid, rcid uint64, onosaction bool) {
 	}
 }
 
-func RemoveDCRApplication(ctx context.Context, appid uint64) error {
+/*func RemoveDCRApplication(ctx context.Context, appid uint64) error {
 
 	err := UnregisterApplication(ctx, appid)
 	if err == nil {
@@ -515,12 +514,10 @@ func RemoveDCRApplication(ctx context.Context, appid uint64) error {
 	}
 
 	return err
-}
+}*/
 
-// ///////////
 // Helpers //
-// ///////////
-func calculateCpuPercent(cpu, precpu *dockertypes.CPUStats) (pct float64) {
+/*func calculateCpuPercent(cpu, precpu *dockertypes.CPUStats) (pct float64) {
 
 	// Container and system cpu times variation
 	ctrDelta := float64(cpu.CPUUsage.TotalUsage) - float64(precpu.CPUUsage.TotalUsage)
@@ -573,15 +570,17 @@ func groupNetworkStats(net networks) (ns dockertypes.NetworkStats) {
 	}
 
 	return
-}
+}*/
 
-func getNodeIP() net.IP {
+func GetNodeIP() net.IP {
 
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	utils.CheckError(err, utils.WarningMode)
+	conn, err := net.Dial("udp", "1.2.3.4:80")
+	utils.CheckError(err, utils.FatalMode)
 	defer conn.Close()
 
-	return conn.LocalAddr().(*net.UDPAddr).IP // Type assertion of an interface type
+	//return conn.LocalAddr().(*net.UDPAddr).IP // TODO. Type assertion of an interface type
+	return net.ParseIP("127.0.0.1")
+
 }
 
 func checkNodePorts(ctx context.Context, ports nat.PortMap) nat.PortMap {
@@ -634,5 +633,55 @@ func isNodePortAvailable(network, host, port string) bool {
 		return false
 	} else {
 		return true
+	}
+}
+
+func CanExecuteContainer(addr common.Address, ctrCpuLimit, ctrMemLimit uint64) (r bool) {
+
+	var cpuUsage, memUsage uint64
+
+	// Get DCR active containers
+	for rcid, ctr := range GetActiveContainers() {
+		// Decode container info
+		var cinfo types.ContainerInfo
+		utils.UnmarshalJSON(ctr.Info, &cinfo)
+
+		if IsContainerHost(rcid, addr) {
+			cpuUsage += cinfo.CpuLimit
+			memUsage += cinfo.MemLimit
+		}
+	}
+
+	// Get and decode node specs
+	var specs types.NodeSpecs
+	utils.UnmarshalJSON(GetNodeSpecs(addr), &specs)
+
+	// Free resources to execute the new container?
+	if cpuUsage+ctrCpuLimit <= specs.Cores*1e9 &&
+		memUsage+ctrMemLimit <= specs.MemTotal {
+		r = true
+	}
+
+	fmt.Println("RES:", addr, cpuUsage, ctrCpuLimit, specs.Cores*1e9, "|", memUsage, ctrMemLimit, specs.MemTotal, r)
+
+	return
+}
+
+// Experiments //
+func PrintFinalStatistics(nodeStore types.NodeStore, pktCounter *types.PacketCounter) {
+
+	// DCR
+	fmt.Println("\n--> Active DCR applications:", GetActiveApplicationsLength())
+	fmt.Println("--> Active DCR containers:", GetActiveContainersLength())
+
+	// Network packets
+	fmt.Println("--> Total network packets:", pktCounter.Total)
+	fmt.Println("		Sent:", pktCounter.Sent)
+	fmt.Println("		Received:", pktCounter.Recv)
+
+	// Reputations
+	fmt.Println("--> Final reputation scores:")
+	for k, v := range nodeStore {
+		fmt.Println("		"+k.String()+":", v.Reputation.Score)
 	}
 }

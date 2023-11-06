@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.21;
 
 // Distributed Device Registry
 library DDR {
     struct NodeData {
         address controller; // Controller contract address
         string specs; // Encoded
-        int64 reputation;
-        uint256 registeredAt; // Unix time
+        //int64 reputation;
+        uint registeredAt; // Unix time
     }
 }

@@ -35,7 +35,7 @@ var showCmd = &cobra.Command{
 		// Print cluster applications
 		apps := managers.GetActiveApplications()
 		if len(apps) == 0 {
-			fmt.Println("--> No cluster applications")
+			fmt.Println("--> No cluster applications found")
 			return
 		}
 		for appid, app := range apps {

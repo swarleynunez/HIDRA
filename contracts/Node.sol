@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.21;
 
 import "./DDR.sol";
 
@@ -10,15 +10,12 @@ contract Node {
     // Object containing node data
     DDR.NodeData private data;
 
-    constructor(
-        address _addr,
-        string memory _specs,
-        int64 _reputation
-    ) public {
+    //constructor(address _addr, string memory _specs, int64 _reputation) {
+    constructor(address _addr, string memory _specs) {
         addr = _addr;
         data.controller = msg.sender;
         data.specs = _specs; // Node specifications
-        data.reputation = _reputation; // Reputation by default
+        //data.reputation = _reputation; // Reputation by default
         data.registeredAt = block.timestamp;
     }
 
@@ -45,9 +42,9 @@ contract Node {
         data.specs = _specs;
     }
 
-    function setVariation(int64 variation) public onlyController {
+    /*function setVariation(int64 variation) public onlyController {
         data.reputation += variation;
-    }
+    }*/
 
     /////////////
     // Getters //
@@ -56,7 +53,7 @@ contract Node {
         return data.specs;
     }
 
-    function getReputation() public view returns (int64) {
+    /*function getReputation() public view returns (int64) {
         return data.reputation;
-    }
+    }*/
 }

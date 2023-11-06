@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.21;
 
 // Distributed Container Registry
 library DCR {
@@ -7,8 +7,8 @@ library DCR {
         address owner; // Node which owns the application
         string info; // Encoded
         uint64[] rcids;
-        uint256 registeredAt; // Unix time
-        uint256 unregisteredAt; // Unix time
+        uint registeredAt; // Unix time
+        uint unregisteredAt; // Unix time
     }
 
     struct Container {
@@ -16,12 +16,12 @@ library DCR {
         string info; // Encoded
         bool autodeployed;
         ContainerInstance[] instances;
-        uint256 registeredAt; // Unix time
-        uint256 unregisteredAt; // Unix time
+        uint registeredAt; // Unix time
+        uint unregisteredAt; // Unix time
     }
 
     struct ContainerInstance {
         address host; // Node which runs the container
-        uint256 startedAt; // Unix time
+        uint startedAt; // Unix time
     }
 }

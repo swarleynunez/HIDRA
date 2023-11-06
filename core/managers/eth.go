@@ -5,22 +5,19 @@ import (
 	"errors"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/swarleynunez/hidra/core/bindings"
 	"github.com/swarleynunez/hidra/core/eth"
 	"github.com/swarleynunez/hidra/core/types"
 	"github.com/swarleynunez/hidra/core/utils"
 )
 
-// To simulate reputable action execution
+/*// To simulate reputable action execution
 type RepAction struct {
 	name  string
 	count int
-}
+}*/
 
-///////////////
 // Instances //
-///////////////
 func controllerInstance() (cinst *bindings.Controller) {
 
 	// Controller smart contract address
@@ -37,13 +34,13 @@ func controllerInstance() (cinst *bindings.Controller) {
 	return
 }
 
-func faucetInstance(faddr common.Address) (finst *bindings.Faucet) {
+/*func faucetInstance(faddr common.Address) (finst *bindings.Faucet) {
 
 	finst, err := bindings.NewFaucet(faddr, _ethc)
 	utils.CheckError(err, utils.FatalMode)
 
 	return
-}
+}*/
 
 func nodeInstance(naddr common.Address) (ninst *bindings.Node) {
 
@@ -53,108 +50,104 @@ func nodeInstance(naddr common.Address) (ninst *bindings.Node) {
 	return
 }
 
-/////////////
 // Setters //
-/////////////
 func DeployController(ctx context.Context) common.Address {
 
 	for {
 		// Create and configure a transactor
-		auth := eth.Transactor(ctx, _ethc, _ks, _from, 6000000)
+		auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000000)
 
 		// Create smart contract
 		caddr, _, _, err := bindings.DeployController(auth, _ethc)
 
 		if err == nil {
 			return caddr
-		} else if !errors.Is(err, core.ErrNonceTooLow) {
+		} else {
 			utils.CheckError(err, utils.FatalMode)
 		}
 	}
 }
 
-func RegisterNode(ctx context.Context) {
+func RegisterNode(ctx context.Context, port uint16) {
 
 	// Txn data encoding
-	specs := utils.MarshalJSON(GetSpecs())
+	ns := GetSpecs()
+	ns.Port = port
+	specs := utils.MarshalJSON(ns)
 
 	for {
 		// Create and configure a transactor
-		auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900000)
+		auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000001)
 
 		// Send transaction
 		_, err := _cinst.RegisterNode(auth, specs)
 
 		if err == nil {
 			return
-		} else if !errors.Is(err, core.ErrNonceTooLow) {
+		} else {
 			utils.CheckError(err, utils.FatalMode)
 		}
 	}
 }
 
-/////////////////////////
 // Reputable functions //
-/////////////////////////
-func SendEvent(ctx context.Context, etype *types.EventType, rcid uint64, nstate *types.State) error {
-
-	limit := getActionLimit(SendEventAction)
+func SendEvent(ctx context.Context, etype *types.EventType, rcid uint64) error {
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) {
-		// Has the event a linked container?
-		if rcid > 0 {
-			appid := GetContainer(rcid).Appid
-			if !existContainer(rcid) ||
-				(!isApplicationOwner(appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
-				isContainerAutodeployed(rcid) ||
-				isContainerUnregistered(rcid) {
-				return errors.New(SendEventAction + ": transaction not sent")
-			}
+	if rcid > 0 { // Has the event a linked container?
+		if !existContainer(rcid) ||
+			(!isApplicationOwner(GetContainer(rcid).Appid, _from.Address) && !IsContainerHost(rcid, _from.Address)) ||
+			isContainerAutodeployed(rcid) ||
+			isContainerUnregistered(rcid) {
+			return errors.New(SendEventAction + ": transaction not sent")
 		}
+	}
 
-		// Txn data encoding
-		et := utils.MarshalJSON(etype)
-		ns := utils.MarshalJSON(nstate)
+	// Txn data encoding
+	et := utils.MarshalJSON(etype)
 
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900001)
+	for {
+		// Create and configure a transactor
+		auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000002)
 
-			// Send transaction
-			_, err := _cinst.SendEvent(auth, et, rcid, ns)
+		// Send transaction
+		_, err := _cinst.SendEvent(auth, et, rcid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
-			}
-			return err
+		if err != nil {
+			//utils.CheckError(err, utils.WarningMode)
+			continue
 		}
-	} else {
-		return errors.New(SendEventAction + ": transaction not sent")
+		return err
 	}
 }
 
-func SendReply(ctx context.Context, eid uint64, nstate *types.State) error {
-
-	limit := getActionLimit(SendReplyAction)
+func SendReply(ctx context.Context, eid uint64, repScores []bindings.DELReputationScore) error {
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
+	if existEvent(eid) &&
 		!isEventSolved(eid) &&
+		!GetEvent(eid).HasRequiredReplies &&
+		!HasRequiredCount(GetClusterConfig().NodesTh, uint64(GetEventReplyCount(eid))) &&
 		!hasAlreadyReplied(eid, _from.Address) {
-
-		// Txn data encoding
-		ns := utils.MarshalJSON(nstate)
+		reputedNodes := make(map[common.Address]bool)
+		for _, v := range repScores {
+			if v.Node == GetFromAccount() ||
+				!IsNodeRegistered(v.Node) ||
+				reputedNodes[v.Node] {
+				return errors.New(SendEventAction + ": transaction not sent")
+			}
+			reputedNodes[v.Node] = true
+		}
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900002)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000003)
 
 			// Send transaction
-			_, err := _cinst.SendReply(auth, eid, ns)
+			_, err := _cinst.SendReply(auth, eid, repScores)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				//utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -166,26 +159,23 @@ func SendReply(ctx context.Context, eid uint64, nstate *types.State) error {
 
 func VoteSolver(ctx context.Context, eid uint64, candAddr common.Address) error {
 
-	limit := getActionLimit(VoteSolverAction)
-	thld := getClusterConfig().NodesThld
-	count := uint64(len(GetEventReplies(eid)))
-
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
+	if existEvent(eid) &&
 		!isEventSolved(eid) &&
-		hasRequiredCount(thld, count) &&
-		hasAlreadyReplied(eid, candAddr) &&
+		GetEvent(eid).HasRequiredReplies &&
+		!GetEvent(eid).HasRequiredVotes &&
+		IsNodeRegistered(candAddr) &&
 		!hasAlreadyVoted(eid, _from.Address) {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900003)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000004)
 
 			// Send transaction
 			_, err := _cinst.VoteSolver(auth, eid, candAddr)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				//utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -197,22 +187,20 @@ func VoteSolver(ctx context.Context, eid uint64, candAddr common.Address) error 
 
 func SolveEvent(ctx context.Context, eid uint64) error {
 
-	limit := getActionLimit(SolveEventAction)
-
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existEvent(eid) &&
+	if existEvent(eid) &&
 		!isEventSolved(eid) &&
 		canSolveEvent(eid, _from.Address) {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900004)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000005)
 
 			// Send transaction
 			_, err := _cinst.SolveEvent(auth, eid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				//utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -224,43 +212,32 @@ func SolveEvent(ctx context.Context, eid uint64) error {
 
 func RegisterApplication(ctx context.Context, ainfo *types.ApplicationInfo, cinfos []types.ContainerInfo, autodeploy bool) error {
 
-	// To simulate reputation
-	actions := []RepAction{{RegisterAppAction, 1}, {RegisterCtrAction, len(cinfos)}}
+	// Txn data encoding
+	ai := utils.MarshalJSON(ainfo)
+	var ci []string
+	for _, cinfo := range cinfos {
+		ci = append(ci, utils.MarshalJSON(cinfo))
+	}
 
-	// Checking zone
-	if hasEstimatedReputation(_from.Address, actions) {
+	for {
+		// Create and configure a transactor
+		auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000006)
 
-		// Txn data encoding
-		ai := utils.MarshalJSON(ainfo)
-		var ci []string
-		for i := range cinfos {
-			ci = append(ci, utils.MarshalJSON(cinfos[i]))
+		// Send transaction
+		_, err := _cinst.RegisterApplication(auth, ai, ci, autodeploy)
+
+		if err != nil {
+			//utils.CheckError(err, utils.WarningMode)
+			continue
 		}
-
-		for {
-			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900005)
-
-			// Send transaction
-			_, err := _cinst.RegisterApplication(auth, ai, ci, autodeploy)
-
-			if errors.Is(err, core.ErrNonceTooLow) {
-				continue
-			}
-			return err
-		}
-	} else {
-		return errors.New(RegisterAppAction + ": transaction not sent")
+		return err
 	}
 }
 
-func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.ContainerInfo, autodeploy bool) error {
-
-	limit := getActionLimit(RegisterCtrAction)
+/*func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.ContainerInfo, autodeploy bool) error {
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existApplication(appid) &&
+	if existApplication(appid) &&
 		isApplicationOwner(appid, _from.Address) &&
 		!IsApplicationUnregistered(appid) {
 
@@ -269,12 +246,13 @@ func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.Container
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900006)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000007)
 
 			// Send transaction
 			_, err := _cinst.RegisterContainer(auth, appid, ci, autodeploy)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -286,12 +264,10 @@ func RegisterContainer(ctx context.Context, appid uint64, cinfo *types.Container
 
 func ActivateContainer(ctx context.Context, rcid uint64) error {
 
-	limit := getActionLimit(ActivateCtrAction)
 	appid := GetContainer(rcid).Appid
 
 	// Checking zone
-	if hasNodeReputation(_from.Address, limit) &&
-		existContainer(rcid) &&
+	if existContainer(rcid) &&
 		isApplicationOwner(appid, _from.Address) &&
 		IsContainerHost(rcid, _from.Address) &&
 		!isContainerUnregistered(rcid) &&
@@ -299,12 +275,13 @@ func ActivateContainer(ctx context.Context, rcid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900007)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000008)
 
 			// Send transaction
 			_, err := _cinst.ActivateContainer(auth, rcid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -331,12 +308,13 @@ func UpdateContainerInfo(ctx context.Context, rcid uint64, cinfo *types.Containe
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900008)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000009)
 
 			// Send transaction
 			_, err := _cinst.UpdateContainerInfo(auth, rcid, ci)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -365,12 +343,13 @@ func UnregisterApplication(ctx context.Context, appid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900009)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000010)
 
 			// Send transaction
 			_, err := _cinst.UnregisterApplication(auth, appid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -394,12 +373,13 @@ func UnregisterContainer(ctx context.Context, rcid uint64) error {
 
 		for {
 			// Create and configure a transactor
-			auth := eth.Transactor(ctx, _ethc, _ks, _from, 7900010)
+			auth := eth.Transactor(ctx, _ethc, _ks, _from, 8000011)
 
 			// Send transaction
 			_, err := _cinst.UnregisterContainer(auth, rcid)
 
-			if errors.Is(err, core.ErrNonceTooLow) {
+			if err != nil {
+				utils.CheckError(err, utils.WarningMode)
 				continue
 			}
 			return err
@@ -407,18 +387,16 @@ func UnregisterContainer(ctx context.Context, rcid uint64) error {
 	} else {
 		return errors.New(UnregisterCtrAction + ": transaction not sent")
 	}
-}
+}*/
 
-/////////////
 // Getters //
-/////////////
-func getFaucetContract() (faddr common.Address) {
+/*func getFaucetContract() (faddr common.Address) {
 
 	faddr, err := _cinst.Faucet(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.FatalMode)
 
 	return
-}
+}*/
 
 func getNodeContract(addr common.Address) (naddr common.Address) {
 
@@ -439,7 +417,7 @@ func getClusterState() *types.ClusterState {
 	return &s
 }
 
-func getClusterConfig() *types.ClusterConfig {
+func GetClusterConfig() *types.ClusterConfig {
 
 	config, err := _cinst.Config(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.WarningMode)
@@ -450,7 +428,7 @@ func getClusterConfig() *types.ClusterConfig {
 	return &c
 }
 
-func getActionLimit(action string) (limit int64) {
+/*func getActionLimit(action string) (limit int64) {
 
 	limit, err := _finst.GetActionLimit(&bind.CallOpts{From: _from.Address}, action)
 	utils.CheckError(err, utils.WarningMode)
@@ -464,6 +442,19 @@ func getActionVariation(action string) (avar int64) {
 	utils.CheckError(err, utils.WarningMode)
 
 	return
+}*/
+
+func GetAllNodeSpecs() map[common.Address]string {
+
+	rn, err := _cinst.GetRegisteredNodes(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	nodes := make(map[common.Address]string)
+	for _, addr := range rn {
+		nodes[addr] = GetNodeSpecs(addr)
+	}
+
+	return nodes
 }
 
 func GetNodeSpecs(addr common.Address) (specs string) {
@@ -475,14 +466,14 @@ func GetNodeSpecs(addr common.Address) (specs string) {
 	return
 }
 
-func getNodeReputation(addr common.Address) (rep int64) {
+/*func getNodeReputation(addr common.Address) (rep int64) {
 
 	ninst := nodeInstance(getNodeContract(addr))
 	rep, err := ninst.GetReputation(&bind.CallOpts{From: _from.Address})
 	utils.CheckError(err, utils.WarningMode)
 
 	return
-}
+}*/
 
 func GetEvent(eid uint64) *types.Event {
 
@@ -495,10 +486,22 @@ func GetEvent(eid uint64) *types.Event {
 	return &e
 }
 
-func GetEventReplies(eid uint64) (r []bindings.DELEventReply) {
+func GetEventReplyCount(eid uint64) int {
 
-	r, err := _cinst.GetEventReplies(&bind.CallOpts{From: _from.Address}, eid)
+	c, err := _cinst.GetEventReplyCount(&bind.CallOpts{From: _from.Address}, eid)
 	utils.CheckError(err, utils.WarningMode)
+
+	return int(c.Int64())
+}
+
+func GetEventReplies(eid uint64) (r []types.EventReply) {
+
+	for i := 0; i < GetEventReplyCount(eid); i++ {
+		raddr, rss, rat, err := _cinst.GetEventReply(&bind.CallOpts{From: _from.Address}, eid, uint64(i))
+		utils.CheckError(err, utils.WarningMode)
+
+		r = append(r, types.EventReply{Replier: raddr, RepScores: rss, RepliedAt: rat})
+	}
 
 	return
 }
@@ -533,19 +536,6 @@ func GetContainerInstances(rcid uint64) (insts []bindings.DCRContainerInstance) 
 	return
 }
 
-func GetActiveApplications() map[uint64]*types.Application {
-
-	aa, err := _cinst.GetActiveApplications(&bind.CallOpts{From: _from.Address})
-	utils.CheckError(err, utils.WarningMode)
-
-	apps := make(map[uint64]*types.Application)
-	for i := range aa {
-		apps[aa[i]] = GetApplication(aa[i])
-	}
-
-	return apps
-}
-
 func GetApplicationContainers(appid uint64) (ctrs []uint64) {
 
 	ctrs, err := _cinst.GetApplicationContainers(&bind.CallOpts{From: _from.Address}, appid)
@@ -560,11 +550,48 @@ func GetApplicationContainersData(appid uint64) map[uint64]*types.Container {
 	utils.CheckError(err, utils.WarningMode)
 
 	ctrs := make(map[uint64]*types.Container)
-	for i := range ac {
-		ctrs[ac[i]] = GetContainer(ac[i])
+	for _, rcid := range ac {
+		ctrs[rcid] = GetContainer(rcid)
 	}
 
 	return ctrs
+}
+
+/*func GetContainersFromCurrentEvents() map[uint64]*types.Container {
+
+	ce, err := _cinst.GetCurrentEvents(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	ctrs := make(map[uint64]*types.Container)
+	for _, eid := range ce {
+		rcid := GetEvent(eid).Rcid
+		if rcid > 0 {
+			ctrs[rcid] = GetContainer(rcid)
+		}
+	}
+
+	return ctrs
+}*/
+
+func GetActiveApplications() map[uint64]*types.Application {
+
+	aa, err := _cinst.GetActiveApplications(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	apps := make(map[uint64]*types.Application)
+	for _, appid := range aa {
+		apps[appid] = GetApplication(appid)
+	}
+
+	return apps
+}
+
+func GetActiveApplicationsLength() int {
+
+	aa, err := _cinst.GetActiveApplications(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	return len(aa)
 }
 
 func GetActiveContainers() map[uint64]*types.Container {
@@ -573,16 +600,22 @@ func GetActiveContainers() map[uint64]*types.Container {
 	utils.CheckError(err, utils.WarningMode)
 
 	ctrs := make(map[uint64]*types.Container)
-	for i := range ac {
-		ctrs[ac[i]] = GetContainer(ac[i])
+	for _, rcid := range ac {
+		ctrs[rcid] = GetContainer(rcid)
 	}
 
 	return ctrs
 }
 
-/////////////
+func GetActiveContainersLength() int {
+
+	ac, err := _cinst.GetActiveContainers(&bind.CallOpts{From: _from.Address})
+	utils.CheckError(err, utils.WarningMode)
+
+	return len(ac)
+}
+
 // Helpers //
-/////////////
 func IsNodeRegistered(addr common.Address) (r bool) {
 
 	r, err := _cinst.IsNodeRegistered(&bind.CallOpts{From: _from.Address}, addr)
@@ -591,7 +624,7 @@ func IsNodeRegistered(addr common.Address) (r bool) {
 	return
 }
 
-func hasNodeReputation(addr common.Address, lrep int64) (r bool) {
+/*func hasNodeReputation(addr common.Address, lrep int64) (r bool) {
 
 	// Check if the node has enough reputation (greater or equal than a limit)
 	r, err := _cinst.HasNodeReputation(&bind.CallOpts{From: _from.Address}, addr, lrep)
@@ -620,11 +653,11 @@ func hasEstimatedReputation(addr common.Address, actions []RepAction) (r bool) {
 	}
 
 	return true
-}
+}*/
 
-func hasRequiredCount(thld uint8, count uint64) (r bool) {
+func HasRequiredCount(th uint8, count uint64) (r bool) {
 
-	r, err := _cinst.HasRequiredCount(&bind.CallOpts{From: _from.Address}, thld, count)
+	r, err := _cinst.HasRequiredCount(&bind.CallOpts{From: _from.Address}, th, count)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
@@ -646,14 +679,6 @@ func IsContainerHost(rcid uint64, addr common.Address) (r bool) {
 	return
 }
 
-func existEvent(eid uint64) (r bool) {
-
-	r, err := _cinst.ExistEvent(&bind.CallOpts{From: _from.Address}, eid)
-	utils.CheckError(err, utils.WarningMode)
-
-	return
-}
-
 func hasAlreadyReplied(eid uint64, addr common.Address) (r bool) {
 
 	r, err := _cinst.HasAlreadyReplied(&bind.CallOpts{From: _from.Address}, eid, addr)
@@ -665,6 +690,14 @@ func hasAlreadyReplied(eid uint64, addr common.Address) (r bool) {
 func hasAlreadyVoted(eid uint64, addr common.Address) (r bool) {
 
 	r, err := _cinst.HasAlreadyVoted(&bind.CallOpts{From: _from.Address}, eid, addr)
+	utils.CheckError(err, utils.WarningMode)
+
+	return
+}
+
+func existEvent(eid uint64) (r bool) {
+
+	r, err := _cinst.ExistEvent(&bind.CallOpts{From: _from.Address}, eid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
@@ -734,13 +767,13 @@ func isContainerActive(rcid uint64) (r bool) {
 	return
 }
 
-func isContainerInCurrentEvent(rcid uint64) (r bool) {
+/*func isContainerInCurrentEvent(rcid uint64) (r bool) {
 
 	r, err := _cinst.IsContainerInCurrentEvent(&bind.CallOpts{From: _from.Address}, rcid)
 	utils.CheckError(err, utils.WarningMode)
 
 	return
-}
+}*/
 
 func isContainerUnregistered(rcid uint64) (r bool) {
 

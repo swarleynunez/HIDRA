@@ -23,9 +23,7 @@ var (
 	officialRepoName = "library"
 )
 
-// //////////////
 // Formatters //
-// //////////////
 func FormatPath(paths ...string) (r string) {
 
 	for i := range paths {
@@ -53,9 +51,7 @@ func FormatImageTag(imgTag string) (r string, err error) {
 	return
 }
 
-// ////////////
 // Checkers //
-// ////////////
 func EmptyEthAddress(addr string) bool {
 
 	return addr == new(common.Address).String()
@@ -63,7 +59,7 @@ func EmptyEthAddress(addr string) bool {
 
 func ValidEthAddress(addr string) bool {
 
-	re := regexp.MustCompile(`(?i)(0x)?[0-9a-f]{40}`) // (?i) case insensitive, (0x)? optional hex prefix
+	re := regexp.MustCompile(`(?i)(0x)?[0-9a-f]{40}`) // (?i) case-insensitive, (0x)? optional hex prefix
 	return re.MatchString(addr)
 }
 
@@ -151,9 +147,7 @@ func CompareValues(value interface{}, comp types.RuleComparator, limit interface
 	return
 }
 
-// ////////////
 // Encoding //
-// ////////////
 func MarshalJSON(v interface{}) string {
 
 	// Encode any struct to JSON

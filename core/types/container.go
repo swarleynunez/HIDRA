@@ -39,7 +39,7 @@ type ContainerType struct {
 
 // Abstraction of all container configs
 type ContainerConfig struct {
-	//CPULimit uint64      `json:"lcpu"`    // Maximum CPU quota in nano units to use (0 for unlimited)
+	CpuLimit uint64      `json:"lcpu"`    // Maximum CPU quota in nano units to use (0 for unlimited)
 	MemLimit uint64      `json:"lmem"`    // Maximum memory to use in bytes (0 for unlimited)
 	Envs     []string    `json:"envs"`    // Environment variables
 	Volumes  []string    `json:"volumes"` // Binding volumes

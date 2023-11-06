@@ -27,7 +27,7 @@ func CheckError(err error, mode int) {
 
 	if err != nil {
 
-		// Get file and code line of the error
+		// Get file and line of the error
 		_, file, line, _ := runtime.Caller(1)
 		file = filepath.Base(file)
 
